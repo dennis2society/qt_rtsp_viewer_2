@@ -13,6 +13,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QRegularExpression>
+#include <QMessageBox>
 
 // ─────────────────────────────────────────────────────────────────────────────
 StreamTab::StreamTab(int streamId, QWidget *parent)
@@ -239,28 +240,29 @@ void StreamTab::onRecordToggled(bool checked)
         StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
         QString folder = StreamStateManager::instance().outputFolder();
 
-        if (!folder.isEmpty()) {
-            // Auto-generate path
-            QDir().mkpath(folder);
-            QString ts  = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
-            QString cam = st.cameraName;
-            cam.replace(QRegularExpression(QStringLiteral("[^a-zA-Z0-9_-]")), QStringLiteral("_"));
-            QString ext = st.recordFormat;
-            QString path = QStringLiteral("%1/%2_%3_recording.%4").arg(folder, ts, cam, ext);
-            m_player->startRecording(path, st.recordCodec, st.recordFps);
-            m_recordBtn->setStyleSheet(QStringLiteral("background-color:#c62828;color:white;"));
-        } else {
-            // Show dialog
-            RecordDialog dlg(folder, st.cameraName, this);
-            if (dlg.exec() == QDialog::Accepted) {
-                m_player->startRecording(dlg.filePath(), dlg.codec(), dlg.fps());
-                m_recordBtn->setStyleSheet(QStringLiteral("background-color:#c62828;color:white;"));
-            } else {
-                m_recordBtn->blockSignals(true);
-                m_recordBtn->setChecked(false);
-                m_recordBtn->blockSignals(false);
-            }
+        if (folder.isEmpty()) {
+            // Show error message
+            QMessageBox::warning(
+                this,
+                QStringLiteral("Output Folder Not Set"),
+                QStringLiteral("Please set an output folder in the sidebar (Global section) "
+                               "before recording."),
+                QMessageBox::Ok);
+            m_recordBtn->blockSignals(true);
+            m_recordBtn->setChecked(false);
+            m_recordBtn->blockSignals(false);
+            return;
         }
+
+        // Auto-generate path
+        QDir().mkpath(folder);
+        QString ts  = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
+        QString cam = st.cameraName;
+        cam.replace(QRegularExpression(QStringLiteral("[^a-zA-Z0-9_-]")), QStringLiteral("_"));
+        QString ext = st.recordFormat;
+        QString path = QStringLiteral("%1/%2_%3_recording.%4").arg(folder, ts, cam, ext);
+        m_player->startRecording(path, st.recordCodec, st.recordFps);
+        m_recordBtn->setStyleSheet(QStringLiteral("background-color:#c62828;color:white;"));
     } else {
         m_player->stopRecording();
         m_recordBtn->setStyleSheet(QString());
