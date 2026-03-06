@@ -95,8 +95,9 @@ void VideoPlayer::play(const QString &url)
     m_player->setSource(QUrl(url));
     m_player->play();
 
-    QMetaObject::invokeMethod(m_worker, "setStreamActive",
-                              Qt::QueuedConnection, Q_ARG(bool, true));
+    if (m_worker)
+        QMetaObject::invokeMethod(m_worker, "setStreamActive",
+                                  Qt::QueuedConnection, Q_ARG(bool, true));
 
     StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
         s.playbackState = PlaybackState::Playing;
@@ -106,8 +107,9 @@ void VideoPlayer::play(const QString &url)
 
 void VideoPlayer::stop()
 {
-    QMetaObject::invokeMethod(m_worker, "setStreamActive",
-                              Qt::QueuedConnection, Q_ARG(bool, false));
+    if (m_worker)
+        QMetaObject::invokeMethod(m_worker, "setStreamActive",
+                                  Qt::QueuedConnection, Q_ARG(bool, false));
 
     m_player->stop();
     m_player->setSource(QUrl());
@@ -141,17 +143,19 @@ void VideoPlayer::startRecording(const QString &path, const QString &codec,
     StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
         s.isRecording = true;
     });
-    QMetaObject::invokeMethod(m_worker, "startRecording",
-                              Qt::QueuedConnection,
-                              Q_ARG(QString, path),
-                              Q_ARG(QString, codec),
-                              Q_ARG(double, fps));
+    if (m_worker)
+        QMetaObject::invokeMethod(m_worker, "startRecording",
+                                  Qt::QueuedConnection,
+                                  Q_ARG(QString, path),
+                                  Q_ARG(QString, codec),
+                                  Q_ARG(double, fps));
 }
 
 void VideoPlayer::stopRecording()
 {
-    QMetaObject::invokeMethod(m_worker, "stopRecording",
-                              Qt::QueuedConnection);
+    if (m_worker)
+        QMetaObject::invokeMethod(m_worker, "stopRecording",
+                                  Qt::QueuedConnection);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

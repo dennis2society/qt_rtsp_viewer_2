@@ -40,6 +40,7 @@ private:
     void updateButtonStates();
 
     int           m_streamId;
+    bool          m_isShutDown = false;
 
     // UI
     QComboBox    *m_urlCombo       = nullptr;

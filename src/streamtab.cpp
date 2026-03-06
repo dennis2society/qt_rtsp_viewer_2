@@ -153,6 +153,12 @@ StreamTab::~StreamTab()
 // ─────────────────────────────────────────────────────────────────────────────
 void StreamTab::shutDown()
 {
+    if (m_isShutDown) return;
+    m_isShutDown = true;
+
+    // Disconnect all signals to prevent callbacks into partially-destroyed objects
+    disconnect(m_player, nullptr, this, nullptr);
+
     m_player->stopRecording();
     m_player->stop();
 }

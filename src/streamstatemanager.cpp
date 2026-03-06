@@ -183,6 +183,16 @@ void StreamStateManager::setOpenTabs(const QList<TabEntry> &tabs)
     saveSettings();
 }
 
+int StreamStateManager::lastActiveTabIndex() const
+{
+    return m_lastActiveTabIndex;
+}
+
+void StreamStateManager::setLastActiveTabIndex(int index)
+{
+    m_lastActiveTabIndex = index;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Persistence
 // ─────────────────────────────────────────────────────────────────────────────
@@ -190,6 +200,7 @@ void StreamStateManager::loadSettings()
 {
     m_outputFolder  = m_settings.value(QStringLiteral("OutputFolder")).toString();
     m_lastPlayedUrl = m_settings.value(QStringLiteral("LastPlayedUrl")).toString();
+    m_lastActiveTabIndex = m_settings.value(QStringLiteral("LastActiveTabIndex"), 0).toInt();
 
     // URL history
     m_urlHistory.clear();
@@ -213,8 +224,26 @@ void StreamStateManager::loadSettings()
     for (int i = 0; i < size; ++i) {
         m_settings.setArrayIndex(i);
         TabEntry e;
-        e.url        = m_settings.value(QStringLiteral("url")).toString();
-        e.cameraName = m_settings.value(QStringLiteral("cameraName")).toString();
+        e.url                    = m_settings.value(QStringLiteral("url")).toString();
+        e.cameraName             = m_settings.value(QStringLiteral("cameraName")).toString();
+        e.blurAmount             = m_settings.value(QStringLiteral("blurAmount"), 0).toInt();
+        e.grayscaleEnabled       = m_settings.value(QStringLiteral("grayscaleEnabled"), false).toBool();
+        e.brightnessAmount       = m_settings.value(QStringLiteral("brightnessAmount"), 0).toInt();
+        e.contrastAmount         = m_settings.value(QStringLiteral("contrastAmount"), 0).toInt();
+        e.colorTemperature       = m_settings.value(QStringLiteral("colorTemperature"), 0).toInt();
+        e.motionDetectionEnabled = m_settings.value(QStringLiteral("motionDetectionEnabled"), false).toBool();
+        e.motionSensitivity      = m_settings.value(QStringLiteral("motionSensitivity"), 20).toInt();
+        e.motionVectorsEnabled   = m_settings.value(QStringLiteral("motionVectorsEnabled"), false).toBool();
+        e.motionGraphEnabled     = m_settings.value(QStringLiteral("motionGraphEnabled"), false).toBool();
+        e.motionGraphSensitivity = m_settings.value(QStringLiteral("motionGraphSensitivity"), 50).toInt();
+        e.faceDetectionEnabled   = m_settings.value(QStringLiteral("faceDetectionEnabled"), false).toBool();
+        e.overlayEnabled         = m_settings.value(QStringLiteral("overlayEnabled"), true).toBool();
+        e.recordCodec            = m_settings.value(QStringLiteral("recordCodec"), QStringLiteral("libx264")).toString();
+        e.recordFormat           = m_settings.value(QStringLiteral("recordFormat"), QStringLiteral("mp4")).toString();
+        e.recordFps              = m_settings.value(QStringLiteral("recordFps"), 25.0).toDouble();
+        e.autoRecordEnabled      = m_settings.value(QStringLiteral("autoRecordEnabled"), false).toBool();
+        e.autoRecordThreshold    = m_settings.value(QStringLiteral("autoRecordThreshold"), 0.50).toDouble();
+        e.autoRecordTimeout      = m_settings.value(QStringLiteral("autoRecordTimeout"), 5).toInt();
         m_openTabs.append(e);
     }
     m_settings.endArray();
@@ -225,6 +254,7 @@ void StreamStateManager::saveSettings()
 {
     m_settings.setValue(QStringLiteral("OutputFolder"), m_outputFolder);
     m_settings.setValue(QStringLiteral("LastPlayedUrl"), m_lastPlayedUrl);
+    m_settings.setValue(QStringLiteral("LastActiveTabIndex"), m_lastActiveTabIndex);
 
     m_settings.beginGroup(QStringLiteral("UrlHistory"));
     m_settings.beginWriteArray(QStringLiteral("urls"), m_urlHistory.size());
@@ -241,8 +271,26 @@ void StreamStateManager::saveSettings()
     m_settings.beginWriteArray(QStringLiteral("tabs"), m_openTabs.size());
     for (int i = 0; i < m_openTabs.size(); ++i) {
         m_settings.setArrayIndex(i);
-        m_settings.setValue(QStringLiteral("url"),        m_openTabs[i].url);
-        m_settings.setValue(QStringLiteral("cameraName"), m_openTabs[i].cameraName);
+        m_settings.setValue(QStringLiteral("url"),                    m_openTabs[i].url);
+        m_settings.setValue(QStringLiteral("cameraName"),             m_openTabs[i].cameraName);
+        m_settings.setValue(QStringLiteral("blurAmount"),             m_openTabs[i].blurAmount);
+        m_settings.setValue(QStringLiteral("grayscaleEnabled"),       m_openTabs[i].grayscaleEnabled);
+        m_settings.setValue(QStringLiteral("brightnessAmount"),       m_openTabs[i].brightnessAmount);
+        m_settings.setValue(QStringLiteral("contrastAmount"),         m_openTabs[i].contrastAmount);
+        m_settings.setValue(QStringLiteral("colorTemperature"),       m_openTabs[i].colorTemperature);
+        m_settings.setValue(QStringLiteral("motionDetectionEnabled"), m_openTabs[i].motionDetectionEnabled);
+        m_settings.setValue(QStringLiteral("motionSensitivity"),      m_openTabs[i].motionSensitivity);
+        m_settings.setValue(QStringLiteral("motionVectorsEnabled"),   m_openTabs[i].motionVectorsEnabled);
+        m_settings.setValue(QStringLiteral("motionGraphEnabled"),     m_openTabs[i].motionGraphEnabled);
+        m_settings.setValue(QStringLiteral("motionGraphSensitivity"), m_openTabs[i].motionGraphSensitivity);
+        m_settings.setValue(QStringLiteral("faceDetectionEnabled"),   m_openTabs[i].faceDetectionEnabled);
+        m_settings.setValue(QStringLiteral("overlayEnabled"),         m_openTabs[i].overlayEnabled);
+        m_settings.setValue(QStringLiteral("recordCodec"),            m_openTabs[i].recordCodec);
+        m_settings.setValue(QStringLiteral("recordFormat"),           m_openTabs[i].recordFormat);
+        m_settings.setValue(QStringLiteral("recordFps"),              m_openTabs[i].recordFps);
+        m_settings.setValue(QStringLiteral("autoRecordEnabled"),      m_openTabs[i].autoRecordEnabled);
+        m_settings.setValue(QStringLiteral("autoRecordThreshold"),    m_openTabs[i].autoRecordThreshold);
+        m_settings.setValue(QStringLiteral("autoRecordTimeout"),      m_openTabs[i].autoRecordTimeout);
     }
     m_settings.endArray();
     m_settings.endGroup();

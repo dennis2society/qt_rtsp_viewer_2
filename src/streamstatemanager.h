@@ -54,9 +54,34 @@ public:
     void    setLastPlayedUrl(const QString &url);
 
     /// Open-tab persistence
-    struct TabEntry { QString url; QString cameraName; };
+    struct TabEntry {
+        QString url;
+        QString cameraName;
+        // Effect settings
+        int  blurAmount              = 0;
+        bool grayscaleEnabled        = false;
+        int  brightnessAmount        = 0;
+        int  contrastAmount          = 0;
+        int  colorTemperature        = 0;
+        bool motionDetectionEnabled  = false;
+        int  motionSensitivity       = 20;
+        bool motionVectorsEnabled    = false;
+        bool motionGraphEnabled      = false;
+        int  motionGraphSensitivity  = 50;
+        bool faceDetectionEnabled    = false;
+        bool overlayEnabled          = true;
+        QString recordCodec          = QStringLiteral("libx264");
+        QString recordFormat         = QStringLiteral("mp4");
+        double  recordFps            = 25.0;
+        bool   autoRecordEnabled     = false;
+        double autoRecordThreshold   = 0.50;
+        int    autoRecordTimeout     = 5;
+    };
     QList<TabEntry> openTabs() const;
     void setOpenTabs(const QList<TabEntry> &tabs);
+
+    int  lastActiveTabIndex() const;
+    void setLastActiveTabIndex(int index);
 
     static constexpr int MaxTabs = 4;
     static constexpr int MaxUrlHistory = 20;
@@ -88,6 +113,7 @@ private:
     QList<UrlEntry>         m_urlHistory;
     QList<TabEntry>         m_openTabs;
     QString                 m_lastPlayedUrl;
+    int                     m_lastActiveTabIndex = 0;
 
     QSettings               m_settings;
 };

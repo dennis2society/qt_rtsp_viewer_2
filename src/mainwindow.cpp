@@ -85,12 +85,43 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     } else {
         for (const auto &entry : savedTabs) {
             addNewTab();
-            auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(m_tabs->count() - 1));
+            int tabIdx = m_tabs->count() - 1;
+            auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(tabIdx));
             if (tab) {
-                // Set camera name
+                int sid = tab->streamId();
+
+                // Restore effect settings into the stream state
+                StreamStateManager::instance().modifyState(sid, [&](StreamState &s) {
+                    s.cameraName             = entry.cameraName;
+                    s.rtspUrl                = entry.url;
+                    s.blurAmount             = entry.blurAmount;
+                    s.grayscaleEnabled       = entry.grayscaleEnabled;
+                    s.brightnessAmount       = entry.brightnessAmount;
+                    s.contrastAmount         = entry.contrastAmount;
+                    s.colorTemperature       = entry.colorTemperature;
+                    s.motionDetectionEnabled = entry.motionDetectionEnabled;
+                    s.motionSensitivity      = entry.motionSensitivity;
+                    s.motionVectorsEnabled   = entry.motionVectorsEnabled;
+                    s.motionGraphEnabled     = entry.motionGraphEnabled;
+                    s.motionGraphSensitivity = entry.motionGraphSensitivity;
+                    s.faceDetectionEnabled   = entry.faceDetectionEnabled;
+                    s.overlayEnabled         = entry.overlayEnabled;
+                    s.recordCodec            = entry.recordCodec;
+                    s.recordFormat           = entry.recordFormat;
+                    s.recordFps              = entry.recordFps;
+                    s.autoRecordEnabled      = entry.autoRecordEnabled;
+                    s.autoRecordThreshold    = entry.autoRecordThreshold;
+                    s.autoRecordTimeout      = entry.autoRecordTimeout;
+                });
+
+                // Set camera name in the line edit
                 auto *nameEdit = tab->findChild<QLineEdit *>();
                 if (nameEdit && !entry.cameraName.isEmpty())
                     nameEdit->setText(entry.cameraName);
+
+                // Update tab title
+                if (!entry.cameraName.isEmpty())
+                    m_tabs->setTabText(tabIdx, entry.cameraName);
 
                 // Set URL (deferred so event loop settles)
                 if (!entry.url.isEmpty()) {
@@ -103,6 +134,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                 }
             }
         }
+
+        // Restore the last active tab
+        int lastIdx = StreamStateManager::instance().lastActiveTabIndex();
+        if (lastIdx >= 0 && lastIdx < m_tabs->count())
+            m_tabs->setCurrentIndex(lastIdx);
     }
 }
 
@@ -114,12 +150,36 @@ MainWindow::~MainWindow()
         auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i));
         if (tab) {
             StreamState st = StreamStateManager::instance().stateCopy(tab->streamId());
-            tabs.append({st.rtspUrl, st.cameraName});
+            StreamStateManager::TabEntry entry;
+            entry.url                    = st.rtspUrl;
+            entry.cameraName             = st.cameraName;
+            entry.blurAmount             = st.blurAmount;
+            entry.grayscaleEnabled       = st.grayscaleEnabled;
+            entry.brightnessAmount       = st.brightnessAmount;
+            entry.contrastAmount         = st.contrastAmount;
+            entry.colorTemperature       = st.colorTemperature;
+            entry.motionDetectionEnabled = st.motionDetectionEnabled;
+            entry.motionSensitivity      = st.motionSensitivity;
+            entry.motionVectorsEnabled   = st.motionVectorsEnabled;
+            entry.motionGraphEnabled     = st.motionGraphEnabled;
+            entry.motionGraphSensitivity = st.motionGraphSensitivity;
+            entry.faceDetectionEnabled   = st.faceDetectionEnabled;
+            entry.overlayEnabled         = st.overlayEnabled;
+            entry.recordCodec            = st.recordCodec;
+            entry.recordFormat           = st.recordFormat;
+            entry.recordFps              = st.recordFps;
+            entry.autoRecordEnabled      = st.autoRecordEnabled;
+            entry.autoRecordThreshold    = st.autoRecordThreshold;
+            entry.autoRecordTimeout      = st.autoRecordTimeout;
+            tabs.append(entry);
         }
     }
     StreamStateManager::instance().setOpenTabs(tabs);
 
-    // Shut down all tabs
+    // Save the active tab index
+    StreamStateManager::instance().setLastActiveTabIndex(m_tabs->currentIndex());
+
+    // Shut down all tabs (disconnects signals first, so no callbacks into dead objects)
     for (int i = 0; i < m_tabs->count(); ++i) {
         auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i));
         if (tab) tab->shutDown();
