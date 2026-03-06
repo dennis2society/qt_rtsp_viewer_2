@@ -61,7 +61,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 )
 
 if(FFMPEG_FOUND)
-    message(STATUS "FFmpeg found – recording support enabled")
+    message(STATUS "FFmpeg found - recording support enabled")
     target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_FFMPEG)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
     target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
