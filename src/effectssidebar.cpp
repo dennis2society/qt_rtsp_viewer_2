@@ -144,6 +144,11 @@ void EffectsSidebar::setupUI()
     m_timeoutLabel->setVisible(false);
     m_timeoutSpin->setVisible(false);
 
+    m_autoRecStatusLabel = new QLabel;
+    m_autoRecStatusLabel->setWordWrap(true);
+    m_autoRecStatusLabel->setVisible(false);
+    lay->addWidget(m_autoRecStatusLabel);
+
     lay->addWidget(hLine());
 
     // ── Global output folder ────────────────────────────────────────
@@ -249,6 +254,26 @@ void EffectsSidebar::connectSlots()
                 QString f = StreamStateManager::instance().outputFolder();
                 m_outputFolderLabel->setText(f.isEmpty() ? QStringLiteral("(not set)") : f);
             });
+
+    // React to stream state changes (e.g. auto-recording started/stopped)
+    connect(&StreamStateManager::instance(), &StreamStateManager::streamStateChanged,
+            this, [this](int streamId) {
+                if (streamId != m_boundStream) return;
+                StreamState st;
+                StreamStateManager::instance().readState(streamId, [&](const StreamState &s) {
+                    st = s;
+                });
+                if (st.isAutoRecording) {
+                    m_autoRecStatusLabel->setText(QStringLiteral("⏺ Auto-recording in progress"));
+                    m_autoRecStatusLabel->setStyleSheet(
+                        QStringLiteral("color:white;background-color:#c62828;padding:4px;font-weight:bold;"));
+                    m_autoRecStatusLabel->setVisible(true);
+                } else {
+                    m_autoRecStatusLabel->setText(QString());
+                    m_autoRecStatusLabel->setStyleSheet(QString());
+                    m_autoRecStatusLabel->setVisible(false);
+                }
+            });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -298,6 +323,18 @@ void EffectsSidebar::bindToStream(int streamId)
     m_thresholdSlider->setVisible(ar);
     m_timeoutLabel->setVisible(ar);
     m_timeoutSpin->setVisible(ar);
+
+    // Auto-record status
+    if (st.isAutoRecording) {
+        m_autoRecStatusLabel->setText(QStringLiteral("⏺ Auto-recording in progress"));
+        m_autoRecStatusLabel->setStyleSheet(
+            QStringLiteral("color:white;background-color:#c62828;padding:4px;font-weight:bold;"));
+        m_autoRecStatusLabel->setVisible(true);
+    } else {
+        m_autoRecStatusLabel->setText(QString());
+        m_autoRecStatusLabel->setStyleSheet(QString());
+        m_autoRecStatusLabel->setVisible(false);
+    }
 
     blockAllSignals(false);
 }

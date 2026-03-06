@@ -207,18 +207,28 @@ QImage OpenCVProcessor::applyMotionVectorsOverlay(const QImage &drawTarget,
         for (int x = 0; x < flow.cols; x += 2) {
             const cv::Point2f &fxy = flow.at<cv::Point2f>(y, x);
             double mag = std::sqrt(fxy.x * fxy.x + fxy.y * fxy.y);
-            if (mag < 0.5) continue;
+            if (mag < 0.3) continue;
 
             double normMag = std::min(mag / 5.0, 1.0);
             int r = static_cast<int>(normMag * 255);
             int b = static_cast<int>((1.0 - normMag) * 255);
-            p.setPen(QPen(QColor(r, 0, b), 1));
+            p.setPen(QPen(QColor(r, 0, b), 3));
 
             double px = x * scaleX;
             double py = y * scaleY;
-            double ex = px + fxy.x * scaleX * 2;
-            double ey = py + fxy.y * scaleY * 2;
+            double ex = px + fxy.x * scaleX * 6;
+            double ey = py + fxy.y * scaleY * 6;
             p.drawLine(QPointF(px, py), QPointF(ex, ey));
+
+            // Draw arrowhead
+            double angle = std::atan2(ey - py, ex - px);
+            double arrowLen = 6.0;
+            double ax1 = ex - arrowLen * std::cos(angle - 0.4);
+            double ay1 = ey - arrowLen * std::sin(angle - 0.4);
+            double ax2 = ex - arrowLen * std::cos(angle + 0.4);
+            double ay2 = ey - arrowLen * std::sin(angle + 0.4);
+            p.drawLine(QPointF(ex, ey), QPointF(ax1, ay1));
+            p.drawLine(QPointF(ex, ey), QPointF(ax2, ay2));
         }
     }
     p.end();
@@ -285,7 +295,7 @@ double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent,
     if (cellW < 1 || cellH < 1) return 0.0;
 
     double maxCell = 0.0, sumCell = 0.0;
-    constexpr double ema = 0.85;
+    constexpr double ema = 0.55;
 
     for (int row = 0; row < kGridRows; ++row) {
         for (int col = 0; col < kGridCols; ++col) {
@@ -307,8 +317,8 @@ double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent,
             int idx = row * kGridCols + col;
             m_cellLevels[idx] = ema * m_cellLevels[idx] + (1.0 - ema) * raw;
 
-            double lv = m_cellLevels[idx] * (sensitivity / 50.0);
-            lv = std::min(lv, 1.0);
+            double lv = m_cellLevels[idx] * (sensitivity / 25.0);
+            lv = std::sqrt(std::min(lv, 1.0));   // non-linear boost
             maxCell = std::max(maxCell, lv);
             sumCell += lv;
         }
@@ -344,17 +354,22 @@ QImage OpenCVProcessor::applyGridMotionOverlay(const QImage &drawTarget,
     for (int row = 0; row < kGridRows; ++row) {
         for (int col = 0; col < kGridCols; ++col) {
             int idx = row * kGridCols + col;
-            double lv = m_cellLevels[idx] * (sensitivity / 50.0);
-            lv = std::min(lv, 1.0);
+            double lv = m_cellLevels[idx] * (sensitivity / 25.0);
+            lv = std::sqrt(std::min(lv, 1.0));   // non-linear boost
 
             QColor c;
             if (lv < 0.4)      c = QColor(0, 255, 0);     // green
             else if (lv < 0.7) c = QColor(255, 255, 0);   // yellow
             else               c = QColor(255, 0, 0);     // red
 
-            int alpha = static_cast<int>(lv * 120);
+            int alpha = static_cast<int>(lv * 180);
+            if (alpha < 8) alpha = 0;   // avoid barely-visible noise
             c.setAlpha(alpha);
             p.fillRect(col * cellW, row * cellH, cellW, cellH, c);
+
+            // Draw grid lines
+            p.setPen(QPen(QColor(255, 255, 255, 40), 1));
+            p.drawRect(col * cellW, row * cellH, cellW, cellH);
         }
     }
     p.end();

@@ -66,27 +66,59 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
                 m_sidebar->bindToStream(streamId);
             });
 
-    // ── Create first tab ────────────────────────────────────────────
-    addNewTab();
+    // ── Restore saved tabs, or create first tab ──────────────────
+    auto savedTabs = StreamStateManager::instance().openTabs();
+    if (savedTabs.isEmpty()) {
+        addNewTab();
+        // Auto-play last URL in the first tab
+        QString lastUrl = StreamStateManager::instance().lastPlayedUrl();
+        if (!lastUrl.isEmpty()) {
+            auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(0));
+            if (tab) {
+                QTimer::singleShot(500, this, [tab, lastUrl]() {
+                    auto *combo = tab->findChild<QComboBox *>();
+                    if (combo && combo->lineEdit())
+                        combo->lineEdit()->setText(lastUrl);
+                });
+            }
+        }
+    } else {
+        for (const auto &entry : savedTabs) {
+            addNewTab();
+            auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(m_tabs->count() - 1));
+            if (tab) {
+                // Set camera name
+                auto *nameEdit = tab->findChild<QLineEdit *>();
+                if (nameEdit && !entry.cameraName.isEmpty())
+                    nameEdit->setText(entry.cameraName);
 
-    // Auto-play last URL in the first tab
-    QString lastUrl = StreamStateManager::instance().lastPlayedUrl();
-    if (!lastUrl.isEmpty()) {
-        auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(0));
-        if (tab) {
-            // Set the URL in the combo and trigger play after a short delay
-            // (allows the event loop to settle)
-            QTimer::singleShot(500, this, [tab, lastUrl]() {
-                auto *combo = tab->findChild<QComboBox *>();
-                if (combo && combo->lineEdit())
-                    combo->lineEdit()->setText(lastUrl);
-            });
+                // Set URL (deferred so event loop settles)
+                if (!entry.url.isEmpty()) {
+                    QString url = entry.url;
+                    QTimer::singleShot(500, this, [tab, url]() {
+                        auto *combo = tab->findChild<QComboBox *>();
+                        if (combo && combo->lineEdit())
+                            combo->lineEdit()->setText(url);
+                    });
+                }
+            }
         }
     }
 }
 
 MainWindow::~MainWindow()
 {
+    // Save open tabs before shutting down
+    QList<StreamStateManager::TabEntry> tabs;
+    for (int i = 0; i < m_tabs->count(); ++i) {
+        auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i));
+        if (tab) {
+            StreamState st = StreamStateManager::instance().stateCopy(tab->streamId());
+            tabs.append({st.rtspUrl, st.cameraName});
+        }
+    }
+    StreamStateManager::instance().setOpenTabs(tabs);
+
     // Shut down all tabs
     for (int i = 0; i < m_tabs->count(); ++i) {
         auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i));

@@ -64,6 +64,7 @@ private:
     QSlider   *m_thresholdSlider        = nullptr;
     QLabel    *m_timeoutLabel           = nullptr;
     QSpinBox  *m_timeoutSpin            = nullptr;
+    QLabel    *m_autoRecStatusLabel     = nullptr;
 
     // Global output folder
     QPushButton *m_outputFolderBtn      = nullptr;

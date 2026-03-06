@@ -172,6 +172,17 @@ void StreamStateManager::setLastPlayedUrl(const QString &url)
     m_settings.sync();
 }
 
+QList<StreamStateManager::TabEntry> StreamStateManager::openTabs() const
+{
+    return m_openTabs;
+}
+
+void StreamStateManager::setOpenTabs(const QList<TabEntry> &tabs)
+{
+    m_openTabs = tabs;
+    saveSettings();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Persistence
 // ─────────────────────────────────────────────────────────────────────────────
@@ -194,6 +205,20 @@ void StreamStateManager::loadSettings()
     }
     m_settings.endArray();
     m_settings.endGroup();
+
+    // Open tabs
+    m_openTabs.clear();
+    m_settings.beginGroup(QStringLiteral("OpenTabs"));
+    size = m_settings.beginReadArray(QStringLiteral("tabs"));
+    for (int i = 0; i < size; ++i) {
+        m_settings.setArrayIndex(i);
+        TabEntry e;
+        e.url        = m_settings.value(QStringLiteral("url")).toString();
+        e.cameraName = m_settings.value(QStringLiteral("cameraName")).toString();
+        m_openTabs.append(e);
+    }
+    m_settings.endArray();
+    m_settings.endGroup();
 }
 
 void StreamStateManager::saveSettings()
@@ -207,6 +232,17 @@ void StreamStateManager::saveSettings()
         m_settings.setArrayIndex(i);
         m_settings.setValue(QStringLiteral("url"),        m_urlHistory[i].url);
         m_settings.setValue(QStringLiteral("cameraName"), m_urlHistory[i].cameraName);
+    }
+    m_settings.endArray();
+    m_settings.endGroup();
+
+    // Open tabs
+    m_settings.beginGroup(QStringLiteral("OpenTabs"));
+    m_settings.beginWriteArray(QStringLiteral("tabs"), m_openTabs.size());
+    for (int i = 0; i < m_openTabs.size(); ++i) {
+        m_settings.setArrayIndex(i);
+        m_settings.setValue(QStringLiteral("url"),        m_openTabs[i].url);
+        m_settings.setValue(QStringLiteral("cameraName"), m_openTabs[i].cameraName);
     }
     m_settings.endArray();
     m_settings.endGroup();

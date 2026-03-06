@@ -101,6 +101,7 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
         m_player->stopRecording();
         m_recordBtn->blockSignals(true);
         m_recordBtn->setChecked(false);
+        m_recordBtn->setStyleSheet(QString());
         m_recordBtn->blockSignals(false);
         updateButtonStates();
     });
@@ -108,6 +109,7 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     connect(m_player, &VideoPlayer::recordingFinished, this, [this](const QString &path) {
         m_recordBtn->blockSignals(true);
         m_recordBtn->setChecked(false);
+        m_recordBtn->setStyleSheet(QString());
         m_recordBtn->blockSignals(false);
         updateButtonStates();
         emit statusMessage(QStringLiteral("Recording saved: %1").arg(path));
@@ -116,6 +118,7 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     connect(m_player, &VideoPlayer::recordingError, this, [this](const QString &msg) {
         m_recordBtn->blockSignals(true);
         m_recordBtn->setChecked(false);
+        m_recordBtn->setStyleSheet(QString());
         m_recordBtn->blockSignals(false);
         updateButtonStates();
         emit statusMessage(QStringLiteral("Recording error: %1").arg(msg));
@@ -205,6 +208,13 @@ void StreamTab::onPlayClicked()
 
 void StreamTab::onStopClicked()
 {
+    // Stop recording if active
+    m_player->stopRecording();
+    m_recordBtn->blockSignals(true);
+    m_recordBtn->setChecked(false);
+    m_recordBtn->setStyleSheet(QString());
+    m_recordBtn->blockSignals(false);
+
     m_player->stop();
     m_pauseBtn->blockSignals(true);
     m_pauseBtn->setChecked(false);
@@ -232,11 +242,13 @@ void StreamTab::onRecordToggled(bool checked)
             QString ext = st.recordFormat;
             QString path = QStringLiteral("%1/%2_%3_recording.%4").arg(folder, ts, cam, ext);
             m_player->startRecording(path, st.recordCodec, st.recordFps);
+            m_recordBtn->setStyleSheet(QStringLiteral("background-color:#c62828;color:white;"));
         } else {
             // Show dialog
             RecordDialog dlg(folder, st.cameraName, this);
             if (dlg.exec() == QDialog::Accepted) {
                 m_player->startRecording(dlg.filePath(), dlg.codec(), dlg.fps());
+                m_recordBtn->setStyleSheet(QStringLiteral("background-color:#c62828;color:white;"));
             } else {
                 m_recordBtn->blockSignals(true);
                 m_recordBtn->setChecked(false);

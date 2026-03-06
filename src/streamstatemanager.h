@@ -53,6 +53,11 @@ public:
     QString lastPlayedUrl() const;
     void    setLastPlayedUrl(const QString &url);
 
+    /// Open-tab persistence
+    struct TabEntry { QString url; QString cameraName; };
+    QList<TabEntry> openTabs() const;
+    void setOpenTabs(const QList<TabEntry> &tabs);
+
     static constexpr int MaxTabs = 4;
     static constexpr int MaxUrlHistory = 20;
 
@@ -81,6 +86,7 @@ private:
     // global settings
     QString                 m_outputFolder;
     QList<UrlEntry>         m_urlHistory;
+    QList<TabEntry>         m_openTabs;
     QString                 m_lastPlayedUrl;
 
     QSettings               m_settings;
