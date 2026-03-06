@@ -271,8 +271,23 @@ void StreamTab::onRemoveUrlClicked()
 {
     QString url = m_urlCombo->currentText().trimmed();
     if (url.isEmpty()) return;
+
+    // Stop playback and recording
+    m_player->stopRecording();
+    m_player->stop();
+    m_recordBtn->blockSignals(true);
+    m_recordBtn->setChecked(false);
+    m_recordBtn->setStyleSheet(QString());
+    m_recordBtn->blockSignals(false);
+    m_pauseBtn->blockSignals(true);
+    m_pauseBtn->setChecked(false);
+    m_pauseBtn->blockSignals(false);
+
+    // Remove from global URL history
     StreamStateManager::instance().removeUrlFromHistory(url);
-    m_urlCombo->removeItem(m_urlCombo->currentIndex());
+
+    // Close this tab (will be removed from persistent config on quit)
+    emit closeTabRequested();
 }
 
 void StreamTab::onCameraNameEdited(const QString &name)

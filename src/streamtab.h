@@ -25,6 +25,7 @@ public:
 signals:
     void tabTitleChanged(int streamId, const QString &title);
     void statusMessage(const QString &msg);
+    void closeTabRequested();
 
 private slots:
     void onPlayClicked();

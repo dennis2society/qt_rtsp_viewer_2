@@ -206,6 +206,12 @@ void MainWindow::addNewTab()
     connect(tab, &StreamTab::statusMessage, this, [this](const QString &msg) {
         statusBar()->showMessage(msg, 5000);
     });
+    connect(tab, &StreamTab::closeTabRequested, this, [this, tab]() {
+        // Find the tab index and close it
+        int idx = m_tabs->indexOf(tab);
+        if (idx >= 0)
+            closeTab(idx);
+    });
 
     // Enable / disable "+"
     m_addTabBtn->setEnabled(m_tabs->count() < StreamStateManager::MaxTabs);
