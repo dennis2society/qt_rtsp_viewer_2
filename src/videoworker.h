@@ -4,13 +4,20 @@
 #include <QImage>
 #include <QDateTime>
 #include <QVideoFrame>
+#include <QMutex>
+#include <atomic>
 
 class OpenCVProcessor;
+class QTimer;
 
 /// Lives on a dedicated QThread.  Receives raw QVideoFrames, applies the
 /// full effects pipeline, and emits composited QImages.  Recording is handled
 /// by a separate RecordingWorker on its own thread — this class only forwards
 /// frames via the frameForRecording signal.
+///
+/// Frame delivery uses a "latest frame" pattern: incoming frames are stored
+/// atomically and only the most recent frame is processed, preventing queue
+/// build-up and display latency.
 class VideoWorker : public QObject {
     Q_OBJECT
 
@@ -19,8 +26,10 @@ public:
     ~VideoWorker() override;
 
 public slots:
-    // ── frame pipeline ──────────────────────────────────────────────
-    void processFrame(const QVideoFrame &frame);
+    /// Called from the multimedia thread (DirectConnection).  Stores the
+    /// frame and returns immediately — no heavy processing here.
+    void submitFrame(const QVideoFrame &frame);
+
     void setPaused(bool p);
     void setStreamActive(bool active);
 
@@ -42,7 +51,13 @@ signals:
     void autoRecordingStarted(const QString &path);
     void autoRecordingStopped(const QString &path);
 
+private slots:
+    /// Driven by QTimer(0) on the worker thread.  Grabs the latest
+    /// submitted frame and runs the full effects pipeline.
+    void processPendingFrame();
+
 private:
+    void processFrame(const QVideoFrame &frame);
     void paintFpsOverlay(QImage &img);
     void handleAutoRecord(double motionLevel);
 
@@ -60,6 +75,11 @@ private:
     // Clean-frame bookkeeping (for detection algorithms)
     QImage               m_cleanPrevious;
     QImage               m_frozenFrame;
+
+    // ── Latest-frame storage (written by multimedia thread) ─────────
+    QMutex               m_frameMutex;
+    QVideoFrame          m_pendingFrame;
+    std::atomic<bool>    m_hasNewFrame{false};
 
     // ── Recording awareness (no FFmpeg) ─────────────────────────────
     bool    m_recording      = false;

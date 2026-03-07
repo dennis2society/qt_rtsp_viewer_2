@@ -73,9 +73,10 @@ void VideoPlayer::startWorker()
     connect(m_workerThread, &QThread::finished,
             m_worker, &QObject::deleteLater);
 
-    // Frame pipeline (cross-thread, queued)
+    // Frame submission: multimedia thread → worker (DirectConnection stores
+    // latest frame atomically; worker's QTimer picks it up — drops stale frames)
     connect(m_captureSink, &QVideoSink::videoFrameChanged,
-            m_worker, &VideoWorker::processFrame);
+            m_worker, &VideoWorker::submitFrame, Qt::DirectConnection);
     connect(m_worker, &VideoWorker::frameReady,
             this, &VideoPlayer::displayFrame);
     connect(this, &VideoPlayer::pauseStateChanged,

@@ -7,6 +7,7 @@
 #include <QDir>
 #include <QDateTime>
 #include <QRegularExpression>
+#include <QTimer>
 
 // ─────────────────────────────────────────────────────────────────────────────
 VideoWorker::VideoWorker(int streamId, QObject *parent)
@@ -14,6 +15,13 @@ VideoWorker::VideoWorker(int streamId, QObject *parent)
 {
     m_processor = new OpenCVProcessor();
     m_fpsTimer  = QDateTime::currentDateTime();
+
+    // Zero-interval timer drives frame processing on this thread's event loop.
+    // It fires whenever the loop is idle, which naturally rate-limits processing
+    // to the speed the CPU can handle while still servicing other slots.
+    auto *timer = new QTimer(this);
+    connect(timer, &QTimer::timeout, this, &VideoWorker::processPendingFrame);
+    timer->start(0);
 }
 
 VideoWorker::~VideoWorker()
@@ -27,6 +35,35 @@ VideoWorker::~VideoWorker()
 void VideoWorker::setPaused(bool p)   { m_paused = p; }
 void VideoWorker::setStreamActive(bool a) { m_streamActive = a; }
 void VideoWorker::setRecording(bool on)  { m_recording = on; }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Frame submission (runs on multimedia thread — must be fast)
+// ─────────────────────────────────────────────────────────────────────────────
+void VideoWorker::submitFrame(const QVideoFrame &frame)
+{
+    // Atomically store the latest frame; previous unprocessed frame is discarded.
+    QMutexLocker lk(&m_frameMutex);
+    m_pendingFrame = frame;
+    m_hasNewFrame.store(true, std::memory_order_release);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Timer-driven: grab latest frame and process it
+// ─────────────────────────────────────────────────────────────────────────────
+void VideoWorker::processPendingFrame()
+{
+    if (!m_hasNewFrame.load(std::memory_order_acquire)) return;
+
+    QVideoFrame frame;
+    {
+        QMutexLocker lk(&m_frameMutex);
+        frame = m_pendingFrame;
+        m_pendingFrame = QVideoFrame();
+        m_hasNewFrame.store(false, std::memory_order_release);
+    }
+
+    processFrame(frame);
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Core frame pipeline
