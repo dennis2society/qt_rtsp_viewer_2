@@ -8,6 +8,8 @@
 #include <QDateTime>
 #include <QRegularExpression>
 
+#include <string>
+
 // ─────────────────────────────────────────────────────────────────────────────
 VideoWorker::VideoWorker(int streamId, QObject *parent)
     : QObject(parent), m_streamId(streamId)
@@ -179,6 +181,8 @@ void VideoWorker::handleAutoRecord(double motionLevel)
     qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
 
     if (motionLevel >= st.autoRecordThreshold) {
+        // Reset the timeout countdown – keeps recording alive while motion
+        // continues to exceed the threshold (ensures continuous recording).
         m_lastMotionAboveMs = nowMs;
 
         if (!m_autoRecording && !m_recording) {
@@ -199,6 +203,8 @@ void VideoWorker::handleAutoRecord(double motionLevel)
             m_recCodec   = st.recordCodec;
             m_recFps     = st.recordFps;
             m_recording  = true;
+            m_recOpen    = false;
+            m_recFrameIndex = 0;
             m_autoRecording   = true;
             m_autoRecStartTime = QDateTime::currentDateTime();
 
@@ -304,7 +310,20 @@ bool VideoWorker::openRecorder(int w, int h)
         if (ret < 0) { avcodec_free_context(&m_codecCtx); avformat_free_context(m_fmtCtx); m_fmtCtx = nullptr; return false; }
     }
 
-    ret = avformat_write_header(m_fmtCtx, nullptr);
+    // For MP4/MOV containers, use fragmented mode so the file is
+    // continuously playable even if the recorder is not cleanly closed.
+    AVDictionary *muxOpts = nullptr;
+    if (m_fmtCtx->oformat && m_fmtCtx->oformat->name) {
+        std::string fmt(m_fmtCtx->oformat->name);
+        if (fmt.find("mp4") != std::string::npos ||
+            fmt.find("mov") != std::string::npos) {
+            av_dict_set(&muxOpts, "movflags",
+                        "frag_keyframe+empty_moov+default_base_moof", 0);
+        }
+    }
+
+    ret = avformat_write_header(m_fmtCtx, &muxOpts);
+    av_dict_free(&muxOpts);
     if (ret < 0) { avio_closep(&m_fmtCtx->pb); avcodec_free_context(&m_codecCtx); avformat_free_context(m_fmtCtx); m_fmtCtx = nullptr; return false; }
 
     m_avFrame = av_frame_alloc();
@@ -361,6 +380,10 @@ void VideoWorker::encodeAndWrite(AVFrame *frame)
         av_packet_unref(pkt);
     }
     av_packet_free(&pkt);
+
+    // Flush I/O buffer so data is continuously written to disk
+    if (m_fmtCtx && m_fmtCtx->pb)
+        avio_flush(m_fmtCtx->pb);
 }
 
 void VideoWorker::closeRecorder()
