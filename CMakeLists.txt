@@ -36,6 +36,7 @@ set(SOURCES
     src/effectssidebar.cpp
     src/opencvprocessor.cpp
     src/recorddialog.cpp
+    res/resources.qrc
 )
 
 set(HEADERS
