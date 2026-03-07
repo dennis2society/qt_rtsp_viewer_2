@@ -121,6 +121,30 @@ QImage OpenCVProcessor::applyColorTemperature(const QImage &src, int temperature
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Codec-artifact spike detector
+// ─────────────────────────────────────────────────────────────────────────────
+bool OpenCVProcessor::isSpikeFrame(const cv::Mat &grayCur, const cv::Mat &grayPrev)
+{
+    cv::Mat diff;
+    cv::absdiff(grayCur, grayPrev, diff);
+    double globalDiff = cv::mean(diff)[0] / 255.0;
+
+    if (m_globalDiffEma < 0.0) {
+        // Initialise on the first frame; never treat first frame as spike
+        m_globalDiffEma = globalDiff;
+        return false;
+    }
+
+    bool spike = (globalDiff > kSpikeMultiplier * m_globalDiffEma) && (m_globalDiffEma > 0.002);
+
+    if (!spike) {
+        // Update EMA only from clean frames so it doesn't drift upward
+        m_globalDiffEma = kGlobalDiffEmaAlpha * globalDiff + (1.0 - kGlobalDiffEmaAlpha) * m_globalDiffEma;
+    }
+    return spike;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Motion detection overlay (contour-based)
 // ─────────────────────────────────────────────────────────────────────────────
 QImage OpenCVProcessor::applyMotionDetectionOverlay(const QImage &drawTarget, const QImage &cleanCurrent, const QImage &cleanPrevious, int sensitivity)
@@ -139,6 +163,10 @@ QImage OpenCVProcessor::applyMotionDetectionOverlay(const QImage &drawTarget, co
     cv::Mat grayCur, grayPrev;
     cv::cvtColor(cur, grayCur, cv::COLOR_BGR2GRAY);
     cv::cvtColor(prev, grayPrev, cv::COLOR_BGR2GRAY);
+
+    // Suppress I-frame / codec-artifact spikes
+    if (isSpikeFrame(grayCur, grayPrev))
+        return drawTarget;
 
     cv::absdiff(grayCur, grayPrev, m_work2);
     int thresh = std::max(1, 100 - sensitivity);
@@ -180,6 +208,10 @@ QImage OpenCVProcessor::applyMotionVectorsOverlay(const QImage &drawTarget, cons
     cv::Mat grayCur, grayPrev;
     cv::cvtColor(cur, grayCur, cv::COLOR_BGR2GRAY);
     cv::cvtColor(prev, grayPrev, cv::COLOR_BGR2GRAY);
+
+    // Suppress I-frame / codec-artifact spikes
+    if (isSpikeFrame(grayCur, grayPrev))
+        return drawTarget;
 
     // Downscale to 10 % for performance
     cv::Mat smallCur, smallPrev;
@@ -278,6 +310,19 @@ double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent, const QIm
     cv::cvtColor(cur, grayCur, cv::COLOR_BGR2GRAY);
     cv::cvtColor(prev, grayPrev, cv::COLOR_BGR2GRAY);
 
+    // Suppress I-frame / codec-artifact spikes — keep previous cell levels
+    if (isSpikeFrame(grayCur, grayPrev)) {
+        // Decay existing levels toward zero so display fades naturally
+        constexpr double decayEma = 0.85;
+        double maxCell = 0.0, sumCell = 0.0;
+        for (int i = 0; i < kGridCols * kGridRows; ++i) {
+            m_cellLevels[i] *= decayEma;
+            maxCell = std::max(maxCell, m_cellLevels[i]);
+            sumCell += m_cellLevels[i];
+        }
+        return std::min(0.6 * maxCell + 0.4 * (sumCell / (kGridCols * kGridRows)), 1.0);
+    }
+
     int cellW = grayCur.cols / kGridCols;
     int cellH = grayCur.rows / kGridRows;
     if (cellW < 1 || cellH < 1)
@@ -293,15 +338,6 @@ double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent, const QIm
             cv::absdiff(grayCur(roi), grayPrev(roi), diff);
             double raw = cv::mean(diff)[0] / 255.0; // 0 … 1
 
-            // Spike rejection via median of recent frames
-            if (!m_medianHistory.empty()) {
-                std::vector<double> sorted(m_medianHistory.begin(), m_medianHistory.end());
-                std::sort(sorted.begin(), sorted.end());
-                double median = sorted[sorted.size() / 2];
-                if (raw > 3.0 * median && median > 0.001)
-                    raw = median;
-            }
-
             int idx = row * kGridCols + col;
             m_cellLevels[idx] = ema * m_cellLevels[idx] + (1.0 - ema) * raw;
 
@@ -313,11 +349,6 @@ double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent, const QIm
     }
 
     double aggregate = 0.6 * maxCell + 0.4 * (sumCell / (kGridCols * kGridRows));
-
-    m_medianHistory.push_back(aggregate);
-    if (static_cast<int>(m_medianHistory.size()) > kMedianWindowLen)
-        m_medianHistory.pop_front();
-
     return std::min(aggregate, 1.0);
 }
 

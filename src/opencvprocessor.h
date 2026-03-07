@@ -54,9 +54,18 @@ private:
     static constexpr int kGridCols = 6;
     static constexpr int kGridRows = 4;
     std::vector<double> m_cellLevels; // smoothed EMA per cell
-    std::deque<double> m_medianHistory; // for spike rejection
-    static constexpr int kMedianWindowLen = 30;
 
     // per-cell history for the stacked bar chart
     std::vector<std::deque<double>> m_cellHistory;
+
+    // Codec-artifact (I-frame) spike rejection
+    // Tracks EMA of the whole-frame mean absolute diff so outlier frames
+    // (I-frames, decoder glitches) can be detected and suppressed.
+    double m_globalDiffEma = -1.0; // -1 means "not yet initialised"
+    static constexpr double kGlobalDiffEmaAlpha = 0.15; // slow-rising EMA
+    static constexpr double kSpikeMultiplier = 4.0; // frame is spike if diff > N × EMA
+
+    // Helper: returns true when the frame-to-frame diff looks like a codec
+    // artifact and updates m_globalDiffEma only for clean frames.
+    bool isSpikeFrame(const cv::Mat &grayCur, const cv::Mat &grayPrev);
 };
