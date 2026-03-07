@@ -147,7 +147,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 void VideoWorker::paintFpsOverlay(QImage &img)
 {
     QPainter p(&img);
-    p.setPen(Qt::white);
+    p.setPen(Qt::green);
     p.setFont(QFont(QStringLiteral("Monospace"), 10, QFont::Bold));
 
     QString fps = QStringLiteral("FPS: %1").arg(m_fps, 0, 'f', 1);

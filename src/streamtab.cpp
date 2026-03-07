@@ -211,6 +211,7 @@ void StreamTab::onPlayClicked()
     updateButtonStates();
 
     emit tabTitleChanged(m_streamId, cam);
+    emit statusMessage(QStringLiteral("Playing: %1").arg(cam));
 }
 
 void StreamTab::onStopClicked()
@@ -227,17 +228,28 @@ void StreamTab::onStopClicked()
     m_pauseBtn->setChecked(false);
     m_pauseBtn->blockSignals(false);
     updateButtonStates();
+
+    StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
+    emit statusMessage(QStringLiteral("Playback stopped: %1").arg(st.cameraName));
 }
 
 void StreamTab::onPauseToggled(bool checked)
 {
     m_player->setPaused(checked);
+
+    StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
+    if (checked) {
+        emit statusMessage(QStringLiteral("Paused: %1").arg(st.cameraName));
+    } else {
+        emit statusMessage(QStringLiteral("Resumed: %1").arg(st.cameraName));
+    }
 }
 
 void StreamTab::onRecordToggled(bool checked)
 {
+    StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
+
     if (checked) {
-        StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
         QString folder = StreamStateManager::instance().outputFolder();
 
         if (folder.isEmpty()) {
@@ -263,9 +275,11 @@ void StreamTab::onRecordToggled(bool checked)
         QString path = QStringLiteral("%1/%2_%3_recording.%4").arg(folder, ts, cam, ext);
         m_player->startRecording(path, st.recordCodec, st.recordFps);
         m_recordBtn->setStyleSheet(QStringLiteral("background-color:#c62828;color:white;"));
+        emit statusMessage(QStringLiteral("Recording started: %1").arg(st.cameraName));
     } else {
         m_player->stopRecording();
         m_recordBtn->setStyleSheet(QString());
+        emit statusMessage(QStringLiteral("Recording stopped: %1").arg(st.cameraName));
     }
 }
 
