@@ -147,8 +147,8 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 void VideoWorker::paintFpsOverlay(QImage &img)
 {
     QPainter p(&img);
-    p.setPen(Qt::green);
-    p.setFont(QFont(QStringLiteral("Monospace"), 10, QFont::Bold));
+    p.setPen(QPen(QColor(0, 255, 0), 2));  // Bright green with 2px width for better visibility
+    p.setFont(QFont(QStringLiteral("Monospace"), 13, QFont::Bold));
 
     QString fps = QStringLiteral("FPS: %1").arg(m_fps, 0, 'f', 1);
     QString res = QStringLiteral("Res: %1×%2").arg(img.width()).arg(img.height());
@@ -198,16 +198,9 @@ void VideoWorker::handleAutoRecord(double motionLevel)
             m_recPath    = path;
             m_recCodec   = st.recordCodec;
             m_recFps     = st.recordFps;
-            m_recOpen    = false;
-            m_recFrameIndex = 0;
             m_recording  = true;
             m_autoRecording   = true;
             m_autoRecStartTime = QDateTime::currentDateTime();
-
-            StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
-                s.isAutoRecording = true;
-                s.isRecording     = true;
-            });
 
             emit autoRecordingStarted(path);
         }
