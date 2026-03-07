@@ -32,6 +32,7 @@ set(SOURCES
     src/streamtab.cpp
     src/videoplayer.cpp
     src/videoworker.cpp
+    src/recordingworker.cpp
     src/effectssidebar.cpp
     src/opencvprocessor.cpp
     src/recorddialog.cpp
@@ -44,6 +45,7 @@ set(HEADERS
     src/streamtab.h
     src/videoplayer.h
     src/videoworker.h
+    src/recordingworker.h
     src/effectssidebar.h
     src/opencvprocessor.h
     src/recorddialog.h

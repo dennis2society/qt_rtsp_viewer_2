@@ -7,6 +7,7 @@ class QVideoWidget;
 class QVideoSink;
 class QThread;
 class VideoWorker;
+class RecordingWorker;
 
 /// Widget that wraps QMediaPlayer + QVideoWidget + worker thread.
 /// One instance per stream tab.
@@ -53,6 +54,11 @@ private:
     QVideoWidget    *m_videoWidget = nullptr;
     QVideoSink      *m_captureSink = nullptr;
 
-    QThread         *m_workerThread = nullptr;
-    VideoWorker     *m_worker       = nullptr;
+    // Video processing thread
+    QThread         *m_workerThread   = nullptr;
+    VideoWorker     *m_worker         = nullptr;
+
+    // Recording thread (separate from video processing)
+    QThread         *m_recorderThread = nullptr;
+    RecordingWorker *m_recorder       = nullptr;
 };

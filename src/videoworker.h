@@ -5,20 +5,12 @@
 #include <QDateTime>
 #include <QVideoFrame>
 
-#ifdef HAVE_FFMPEG
-extern "C" {
-#include <libavcodec/avcodec.h>
-#include <libavformat/avformat.h>
-#include <libavutil/imgutils.h>
-#include <libavutil/opt.h>
-#include <libswscale/swscale.h>
-}
-#endif
-
 class OpenCVProcessor;
 
 /// Lives on a dedicated QThread.  Receives raw QVideoFrames, applies the
-/// full effects pipeline, optionally records, and emits composited QImages.
+/// full effects pipeline, and emits composited QImages.  Recording is handled
+/// by a separate RecordingWorker on its own thread — this class only forwards
+/// frames via the frameForRecording signal.
 class VideoWorker : public QObject {
     Q_OBJECT
 
@@ -32,28 +24,27 @@ public slots:
     void setPaused(bool p);
     void setStreamActive(bool active);
 
-    // ── recording ───────────────────────────────────────────────────
-    void startRecording(const QString &path, const QString &codec, double fps);
-    void stopRecording();
+    // ── recording state (kept for auto-record logic) ────────────────
+    void setRecording(bool on);
 
 signals:
     void frameReady(const QImage &image);
-    void recordingStarted();
-    void recordingFinished(const QString &path);
-    void recordingError(const QString &msg);
+
+    /// Emitted for every frame while recording is active.  Connected to
+    /// RecordingWorker::enqueueFrame across threads (queued connection).
+    void frameForRecording(const QImage &image);
+
+    /// Auto-record requests — connected to RecordingWorker via VideoPlayer
+    void startRecordingRequested(const QString &path, const QString &codec,
+                                 double fps);
+    void stopRecordingRequested();
+
     void autoRecordingStarted(const QString &path);
     void autoRecordingStopped(const QString &path);
 
 private:
     void paintFpsOverlay(QImage &img);
     void handleAutoRecord(double motionLevel);
-
-#ifdef HAVE_FFMPEG
-    bool openRecorder(int w, int h);
-    void writeRecordingFrame(const QImage &img);
-    void encodeAndWrite(AVFrame *frame);
-    void closeRecorder();
-#endif
 
     int                  m_streamId;
     OpenCVProcessor     *m_processor = nullptr;
@@ -70,24 +61,14 @@ private:
     QImage               m_cleanPrevious;
     QImage               m_frozenFrame;
 
-    // ── Recording state ─────────────────────────────────────────────
+    // ── Recording awareness (no FFmpeg) ─────────────────────────────
     bool    m_recording      = false;
-    bool    m_recOpen        = false;
     QString m_recPath;
     QString m_recCodec;
     double  m_recFps         = 25.0;
-    int64_t m_recFrameIndex  = 0;
 
     // ── Auto-record ─────────────────────────────────────────────────
     bool      m_autoRecording    = false;
     QDateTime m_autoRecStartTime;
     qint64    m_lastMotionAboveMs = 0;
-
-#ifdef HAVE_FFMPEG
-    AVFormatContext *m_fmtCtx   = nullptr;
-    AVCodecContext  *m_codecCtx = nullptr;
-    AVStream        *m_stream   = nullptr;
-    AVFrame         *m_avFrame  = nullptr;
-    SwsContext      *m_swsCtx   = nullptr;
-#endif
 };

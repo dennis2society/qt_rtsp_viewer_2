@@ -1,5 +1,6 @@
 #include "videoplayer.h"
 #include "videoworker.h"
+#include "recordingworker.h"
 #include "streamstatemanager.h"
 
 #include <QMediaPlayer>
@@ -42,18 +43,35 @@ VideoPlayer::~VideoPlayer()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Worker thread management
+// Worker + recorder thread management
 // ─────────────────────────────────────────────────────────────────────────────
 void VideoPlayer::startWorker()
 {
     if (m_workerThread) return;
 
+    // ── Recorder thread (must be created first so connections exist) ──
+    m_recorderThread = new QThread(this);
+    m_recorder       = new RecordingWorker();          // no parent – moved to thread
+    m_recorder->moveToThread(m_recorderThread);
+    connect(m_recorderThread, &QThread::finished,
+            m_recorder, &QObject::deleteLater);
+
+    // Recording signals → VideoPlayer
+    connect(m_recorder, &RecordingWorker::recordingStarted,
+            this, &VideoPlayer::recordingStarted);
+    connect(m_recorder, &RecordingWorker::recordingFinished,
+            this, &VideoPlayer::recordingFinished);
+    connect(m_recorder, &RecordingWorker::recordingError,
+            this, &VideoPlayer::recordingError);
+
+    m_recorderThread->start();
+
+    // ── Video worker thread ──────────────────────────────────────────
     m_workerThread = new QThread(this);
-    m_worker       = new VideoWorker(m_streamId);    // no parent – moved to thread
-
+    m_worker       = new VideoWorker(m_streamId);      // no parent – moved to thread
     m_worker->moveToThread(m_workerThread);
-
-    connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
+    connect(m_workerThread, &QThread::finished,
+            m_worker, &QObject::deleteLater);
 
     // Frame pipeline (cross-thread, queued)
     connect(m_captureSink, &QVideoSink::videoFrameChanged,
@@ -63,13 +81,17 @@ void VideoPlayer::startWorker()
     connect(this, &VideoPlayer::pauseStateChanged,
             m_worker, &VideoWorker::setPaused);
 
-    // Recording signals relay
-    connect(m_worker, &VideoWorker::recordingStarted,
-            this, &VideoPlayer::recordingStarted);
-    connect(m_worker, &VideoWorker::recordingFinished,
-            this, &VideoPlayer::recordingFinished);
-    connect(m_worker, &VideoWorker::recordingError,
-            this, &VideoPlayer::recordingError);
+    // Recording frame pipeline: VideoWorker → RecordingWorker (cross-thread)
+    connect(m_worker, &VideoWorker::frameForRecording,
+            m_recorder, &RecordingWorker::enqueueFrame);
+
+    // Auto-record signals: VideoWorker → RecordingWorker
+    connect(m_worker, &VideoWorker::startRecordingRequested,
+            m_recorder, &RecordingWorker::startRecording);
+    connect(m_worker, &VideoWorker::stopRecordingRequested,
+            m_recorder, &RecordingWorker::stopRecording);
+
+    // Auto-record UI signals → VideoPlayer
     connect(m_worker, &VideoWorker::autoRecordingStarted,
             this, &VideoPlayer::autoRecordingStarted);
     connect(m_worker, &VideoWorker::autoRecordingStopped,
@@ -80,11 +102,23 @@ void VideoPlayer::startWorker()
 
 void VideoPlayer::stopWorker()
 {
-    if (!m_workerThread) return;
-    m_workerThread->quit();
-    m_workerThread->wait();
-    m_workerThread = nullptr;      // deleteLater handles worker
-    m_worker = nullptr;
+    // ── Stop recorder thread first (may need to flush) ───────────────
+    if (m_recorderThread) {
+        if (m_recorder)
+            m_recorder->requestInterrupt();
+        m_recorderThread->quit();
+        m_recorderThread->wait(3000);    // max 3 seconds to drain
+        m_recorderThread = nullptr;
+        m_recorder       = nullptr;
+    }
+
+    // ── Then stop the video worker ───────────────────────────────────
+    if (m_workerThread) {
+        m_workerThread->quit();
+        m_workerThread->wait(2000);
+        m_workerThread = nullptr;
+        m_worker       = nullptr;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -135,7 +169,7 @@ void VideoPlayer::setPaused(bool paused)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Recording forwarding
+// Recording forwarding  (GUI thread → recorder thread)
 // ─────────────────────────────────────────────────────────────────────────────
 void VideoPlayer::startRecording(const QString &path, const QString &codec,
                                   double fps)
@@ -143,8 +177,15 @@ void VideoPlayer::startRecording(const QString &path, const QString &codec,
     StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
         s.isRecording = true;
     });
+
+    // Tell the video worker it should start sending frames for recording
     if (m_worker)
-        QMetaObject::invokeMethod(m_worker, "startRecording",
+        QMetaObject::invokeMethod(m_worker, "setRecording",
+                                  Qt::QueuedConnection, Q_ARG(bool, true));
+
+    // Tell the recorder to open the file
+    if (m_recorder)
+        QMetaObject::invokeMethod(m_recorder, "startRecording",
                                   Qt::QueuedConnection,
                                   Q_ARG(QString, path),
                                   Q_ARG(QString, codec),
@@ -153,9 +194,20 @@ void VideoPlayer::startRecording(const QString &path, const QString &codec,
 
 void VideoPlayer::stopRecording()
 {
+    // Tell the video worker to stop sending frames
     if (m_worker)
-        QMetaObject::invokeMethod(m_worker, "stopRecording",
+        QMetaObject::invokeMethod(m_worker, "setRecording",
+                                  Qt::QueuedConnection, Q_ARG(bool, false));
+
+    // Tell the recorder to flush + finalize
+    if (m_recorder)
+        QMetaObject::invokeMethod(m_recorder, "stopRecording",
                                   Qt::QueuedConnection);
+
+    StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
+        s.isRecording     = false;
+        s.isAutoRecording = false;
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
