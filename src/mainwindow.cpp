@@ -139,6 +139,11 @@ MainWindow::MainWindow(QWidget *parent)
         int lastIdx = StreamStateManager::instance().lastActiveTabIndex();
         if (lastIdx >= 0 && lastIdx < m_tabs->count())
             m_tabs->setCurrentIndex(lastIdx);
+
+        // Ensure sidebar is bound with all settings loaded
+        int activeId = StreamStateManager::instance().activeStreamId();
+        if (activeId >= 0)
+            m_sidebar->bindToStream(activeId);
     }
 }
 
