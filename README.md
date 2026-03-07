@@ -1,6 +1,6 @@
 # Qt RTSP Viewer v2.0
 
-A modern Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, **real-time image processing**, **motion detection**, and **automated recording**. Designed for security monitoring, surveillance, and live stream analysis.
+This is a Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, **real-time image processing**, **motion detection**, and **automated recording**.
 
 ## Features
 
@@ -38,29 +38,7 @@ A modern Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, **
 - **Grid motion analysis** — 6×4 cell grid with per-cell motion level (colour-coded)
 - **Motion history graph** — 120-frame sliding bar chart with stacked rows
 
-### State Management
-- **Centralized state manager** (singleton pattern, thread-safe)
-- **Per-stream persistent settings** — effects, codec, format, auto-record threshold
-- **Global persistent settings** — URL history, output folder, last-played URL
-- **Qt Settings integration** — automatic load/save on startup/shutdown
-
-## Architecture
-
-### Core Components
-- **StreamStateManager** (singleton) — manages all per-stream state and global settings with thread-safe `QReadWriteLock`
-- **VideoPlayer** — wraps `QMediaPlayer` + `QVideoWidget` + worker thread
-- **VideoWorker** — QObject on dedicated QThread; processes frames, applies effects, handles recording
-- **OpenCVProcessor** — pure image processing utility (no QObject, no threading awareness)
-- **EffectsSidebar** — shared sidebar that dynamically binds to the active tab
-- **StreamTab** — per-tab widget with URL selector, controls, and embedded `VideoPlayer`
-- **MainWindow** — tabbed main window with closable tabs (max 4), corner "+" button for new tabs
-
-### Threading
-- **Main thread** — UI, event loop
-- **Worker thread per stream** — frame processing, effects pipeline, recording
-- **Cross-thread communication** — queued signals/slots + `StreamStateManager::readState()` for lock-protected reads
-
-### Dependencies
+## Dependencies
 - **Qt6** (Core, Gui, Widgets, Multimedia, MultimediaWidgets)
 - **OpenCV** 4.0+ (image processing, face detection)
 - **FFmpeg** (optional; recording support via libavcodec, libavformat, libswscale)
@@ -94,10 +72,13 @@ brew install qt6 opencv ffmpeg
 ### Build
 ```bash
 # Configure
-cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake -B build -D CMAKE_BUILD_TYPE=Release
 
 # Build
-cmake --build build -j$(nproc)
+cmake --build build
+
+# Optional faster build
+cmake --build build -- -j4
 
 # Output binary
 ./build/bin/QtRtspViewer
@@ -106,7 +87,7 @@ cmake --build build -j$(nproc)
 ### Build with FFmpeg Support Explicitly Disabled
 ```bash
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DFFMPEG_FOUND=FALSE
-cmake --build build -j$(nproc)
+cmake --build build
 ```
 
 If FFmpeg is not found at configuration time, the build will complete without recording support (displays a warning).
@@ -180,8 +161,6 @@ Per-stream settings (effects, codec, threshold) are managed by `StreamStateManag
 
 - **Maximum 4 tabs** — resource constraint for multi-stream processing
 - **No snapshot/export** — current frame cannot be saved as image (can be added)
-- **No network auth** — RTSP URLs must be unauthenticated (can be extended)
-- **No transcoding** — output codec must be supported by your FFmpeg build
 
 ## Troubleshooting
 
@@ -198,19 +177,6 @@ Per-stream settings (effects, codec, threshold) are managed by `StreamStateManag
 - Ensure output folder exists and is writable
 - FFmpeg support must be compiled in (check CMake configuration output)
 - Check disk space
-
-### Motion detection not working
-- Ensure at least 2 frames are captured (motion is computed between consecutive frames)
-- Increase motion sensitivity (lower threshold in slider)
-- Check that video is not completely static
-
-## Contributing
-
-This is a clean rewrite of the original [qt_rtsp_viewer](https://github.com/dennis2society/qt_rtsp_viewer) with:
-- Proper state management (no data races)
-- Multi-stream tabbed interface
-- Per-stream settings isolation
-- Improved code organization
 
 ## License
 
