@@ -208,6 +208,10 @@ void VideoWorker::handleAutoRecord(double motionLevel)
             m_autoRecording   = true;
             m_autoRecStartTime = QDateTime::currentDateTime();
 
+            StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
+                s.isAutoRecording = true;
+            });
+
             emit autoRecordingStarted(path);
         }
     }
