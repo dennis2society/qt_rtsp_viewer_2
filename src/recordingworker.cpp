@@ -107,6 +107,7 @@ void RecordingWorker::stopRecording()
 // ─────────────────────────────────────────────────────────────────────────────
 void RecordingWorker::processQueue()
 {
+#ifdef HAVE_FFMPEG
     if (!m_recording) return;
     if (m_interrupt.load(std::memory_order_relaxed)) return;
 
@@ -121,6 +122,7 @@ void RecordingWorker::processQueue()
         }
         writeFrame(img);
     }
+#endif
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
