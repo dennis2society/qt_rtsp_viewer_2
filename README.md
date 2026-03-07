@@ -4,6 +4,7 @@ This is a Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, *
 
 ## Disclaimer
 **This project is mostly AI generated** by throwing more or less complex prompts in Github Copilot. Making this took about 6 hours with very few long  and very specific prompts for Claude Opus 4.6 to generate project structure and most of the implementation, and a long series of shorter prompts for Claude Haiku/Sonnet 4.5/4.6 to get some quirks right.
+Considering this, it works impressively well.
 
 ## Features
 
