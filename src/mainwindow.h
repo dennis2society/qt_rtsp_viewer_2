@@ -7,7 +7,8 @@ class QPushButton;
 class EffectsSidebar;
 class StreamTab;
 
-class MainWindow : public QMainWindow {
+class MainWindow : public QMainWindow
+{
     Q_OBJECT
 
 public:
@@ -23,7 +24,7 @@ private slots:
 private:
     int streamIdForTab(int index) const;
 
-    QTabWidget     *m_tabs    = nullptr;
+    QTabWidget *m_tabs = nullptr;
     EffectsSidebar *m_sidebar = nullptr;
-    QPushButton    *m_addTabBtn = nullptr;     // corner widget
+    QPushButton *m_addTabBtn = nullptr; // corner widget
 };

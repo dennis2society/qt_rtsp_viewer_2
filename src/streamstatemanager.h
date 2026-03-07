@@ -2,24 +2,25 @@
 
 #include "streamstate.h"
 
+#include <QList>
+#include <QMap>
 #include <QObject>
+#include <QPair>
 #include <QReadWriteLock>
 #include <QSettings>
-#include <QMap>
-#include <QList>
-#include <QPair>
 #include <functional>
 
 /// Thread-safe singleton that owns every StreamState and the global settings.
 /// Worker threads call readState(); the UI thread calls modifyState().
-class StreamStateManager : public QObject {
+class StreamStateManager : public QObject
+{
     Q_OBJECT
 
 public:
     static StreamStateManager &instance();
 
     // ── stream lifecycle ────────────────────────────────────────────
-    int  createStream();                        ///< returns new streamId
+    int createStream(); ///< returns new streamId
     void removeStream(int id);
 
     // ── thread-safe state access ────────────────────────────────────
@@ -34,53 +35,56 @@ public:
     StreamState stateCopy(int id) const;
 
     bool hasStream(int id) const;
-    int  streamCount() const;
+    int streamCount() const;
     QList<int> streamIds() const;
 
     // ── active stream (UI concept) ──────────────────────────────────
-    int  activeStreamId() const;
+    int activeStreamId() const;
     void setActiveStream(int id);
 
     // ── global settings ─────────────────────────────────────────────
     QString outputFolder() const;
-    void    setOutputFolder(const QString &path);
+    void setOutputFolder(const QString &path);
 
-    struct UrlEntry { QString url; QString cameraName; };
+    struct UrlEntry {
+        QString url;
+        QString cameraName;
+    };
     QList<UrlEntry> urlHistory() const;
     void setUrlHistory(const QList<UrlEntry> &history);
     void addUrlToHistory(const QString &url, const QString &cameraName);
     void removeUrlFromHistory(const QString &url);
     QString lastPlayedUrl() const;
-    void    setLastPlayedUrl(const QString &url);
+    void setLastPlayedUrl(const QString &url);
 
     /// Open-tab persistence
     struct TabEntry {
         QString url;
         QString cameraName;
         // Effect settings
-        int  blurAmount              = 0;
-        bool grayscaleEnabled        = false;
-        int  brightnessAmount        = 0;
-        int  contrastAmount          = 0;
-        int  colorTemperature        = 0;
-        bool motionDetectionEnabled  = false;
-        int  motionSensitivity       = 20;
-        bool motionVectorsEnabled    = false;
-        bool motionGraphEnabled      = false;
-        int  motionGraphSensitivity  = 50;
-        bool faceDetectionEnabled    = false;
-        bool overlayEnabled          = true;
-        QString recordCodec          = QStringLiteral("libx264");
-        QString recordFormat         = QStringLiteral("mp4");
-        double  recordFps            = 25.0;
-        bool   autoRecordEnabled     = false;
-        double autoRecordThreshold   = 0.50;
-        int    autoRecordTimeout     = 5;
+        int blurAmount = 0;
+        bool grayscaleEnabled = false;
+        int brightnessAmount = 0;
+        int contrastAmount = 0;
+        int colorTemperature = 0;
+        bool motionDetectionEnabled = false;
+        int motionSensitivity = 20;
+        bool motionVectorsEnabled = false;
+        bool motionGraphEnabled = false;
+        int motionGraphSensitivity = 50;
+        bool faceDetectionEnabled = false;
+        bool overlayEnabled = true;
+        QString recordCodec = QStringLiteral("libx264");
+        QString recordFormat = QStringLiteral("mp4");
+        double recordFps = 25.0;
+        bool autoRecordEnabled = false;
+        double autoRecordThreshold = 0.50;
+        int autoRecordTimeout = 5;
     };
     QList<TabEntry> openTabs() const;
     void setOpenTabs(const QList<TabEntry> &tabs);
 
-    int  lastActiveTabIndex() const;
+    int lastActiveTabIndex() const;
     void setLastActiveTabIndex(int index);
 
     static constexpr int MaxTabs = 4;
@@ -103,17 +107,17 @@ private:
 
     QString generateCameraName(int index) const;
 
-    mutable QReadWriteLock  m_lock;
-    QMap<int, StreamState>  m_streams;
-    int                     m_nextId       = 1;
-    int                     m_activeStream = -1;
+    mutable QReadWriteLock m_lock;
+    QMap<int, StreamState> m_streams;
+    int m_nextId = 1;
+    int m_activeStream = -1;
 
     // global settings
-    QString                 m_outputFolder;
-    QList<UrlEntry>         m_urlHistory;
-    QList<TabEntry>         m_openTabs;
-    QString                 m_lastPlayedUrl;
-    int                     m_lastActiveTabIndex = 0;
+    QString m_outputFolder;
+    QList<UrlEntry> m_urlHistory;
+    QList<TabEntry> m_openTabs;
+    QString m_lastPlayedUrl;
+    int m_lastActiveTabIndex = 0;
 
-    QSettings               m_settings;
+    QSettings m_settings;
 };

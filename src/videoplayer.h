@@ -11,14 +11,18 @@ class RecordingWorker;
 
 /// Widget that wraps QMediaPlayer + QVideoWidget + worker thread.
 /// One instance per stream tab.
-class VideoPlayer : public QWidget {
+class VideoPlayer : public QWidget
+{
     Q_OBJECT
 
 public:
     explicit VideoPlayer(int streamId, QWidget *parent = nullptr);
     ~VideoPlayer() override;
 
-    int streamId() const { return m_streamId; }
+    int streamId() const
+    {
+        return m_streamId;
+    }
 
     void play(const QString &url);
     void stop();
@@ -49,16 +53,16 @@ private:
     void startWorker();
     void stopWorker();
 
-    int              m_streamId;
-    QMediaPlayer    *m_player     = nullptr;
-    QVideoWidget    *m_videoWidget = nullptr;
-    QVideoSink      *m_captureSink = nullptr;
+    int m_streamId;
+    QMediaPlayer *m_player = nullptr;
+    QVideoWidget *m_videoWidget = nullptr;
+    QVideoSink *m_captureSink = nullptr;
 
     // Video processing thread
-    QThread         *m_workerThread   = nullptr;
-    VideoWorker     *m_worker         = nullptr;
+    QThread *m_workerThread = nullptr;
+    VideoWorker *m_worker = nullptr;
 
     // Recording thread (separate from video processing)
-    QThread         *m_recorderThread = nullptr;
-    RecordingWorker *m_recorder       = nullptr;
+    QThread *m_recorderThread = nullptr;
+    RecordingWorker *m_recorder = nullptr;
 };

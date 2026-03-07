@@ -1,30 +1,31 @@
 #include "mainwindow.h"
-#include "streamtab.h"
 #include "effectssidebar.h"
 #include "streamstatemanager.h"
+#include "streamtab.h"
 
-#include <QComboBox>
-#include <QLineEdit>
-#include <QTabWidget>
-#include <QTabBar>
-#include <QHBoxLayout>
-#include <QVBoxLayout>
-#include <QScrollArea>
-#include <QPushButton>
-#include <QStatusBar>
-#include <QLabel>
 #include <QCloseEvent>
+#include <QComboBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QLineEdit>
+#include <QPushButton>
+#include <QScrollArea>
+#include <QStatusBar>
+#include <QTabBar>
+#include <QTabWidget>
 #include <QTimer>
+#include <QVBoxLayout>
 
 // ─────────────────────────────────────────────────────────────────────────────
-MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
+MainWindow::MainWindow(QWidget *parent)
+    : QMainWindow(parent)
 {
     setWindowTitle(QStringLiteral("RTSP Stream Viewer"));
     resize(1200, 720);
 
     // ── Central widget ──────────────────────────────────────────────
     auto *central = new QWidget;
-    auto *hlay    = new QHBoxLayout(central);
+    auto *hlay = new QHBoxLayout(central);
     hlay->setContentsMargins(4, 4, 4, 4);
 
     // Tab widget
@@ -58,13 +59,12 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
     // ── Connections ─────────────────────────────────────────────────
     connect(m_addTabBtn, &QPushButton::clicked, this, &MainWindow::addNewTab);
     connect(m_tabs, &QTabWidget::tabCloseRequested, this, &MainWindow::closeTab);
-    connect(m_tabs, &QTabWidget::currentChanged,    this, &MainWindow::onCurrentTabChanged);
+    connect(m_tabs, &QTabWidget::currentChanged, this, &MainWindow::onCurrentTabChanged);
 
     // When active stream changes, rebind sidebar
-    connect(&StreamStateManager::instance(), &StreamStateManager::activeStreamChanged,
-            this, [this](int streamId) {
-                m_sidebar->bindToStream(streamId);
-            });
+    connect(&StreamStateManager::instance(), &StreamStateManager::activeStreamChanged, this, [this](int streamId) {
+        m_sidebar->bindToStream(streamId);
+    });
 
     // ── Restore saved tabs, or create first tab ──────────────────
     auto savedTabs = StreamStateManager::instance().openTabs();
@@ -92,26 +92,26 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent)
 
                 // Restore effect settings into the stream state
                 StreamStateManager::instance().modifyState(sid, [&](StreamState &s) {
-                    s.cameraName             = entry.cameraName;
-                    s.rtspUrl                = entry.url;
-                    s.blurAmount             = entry.blurAmount;
-                    s.grayscaleEnabled       = entry.grayscaleEnabled;
-                    s.brightnessAmount       = entry.brightnessAmount;
-                    s.contrastAmount         = entry.contrastAmount;
-                    s.colorTemperature       = entry.colorTemperature;
+                    s.cameraName = entry.cameraName;
+                    s.rtspUrl = entry.url;
+                    s.blurAmount = entry.blurAmount;
+                    s.grayscaleEnabled = entry.grayscaleEnabled;
+                    s.brightnessAmount = entry.brightnessAmount;
+                    s.contrastAmount = entry.contrastAmount;
+                    s.colorTemperature = entry.colorTemperature;
                     s.motionDetectionEnabled = entry.motionDetectionEnabled;
-                    s.motionSensitivity      = entry.motionSensitivity;
-                    s.motionVectorsEnabled   = entry.motionVectorsEnabled;
-                    s.motionGraphEnabled     = entry.motionGraphEnabled;
+                    s.motionSensitivity = entry.motionSensitivity;
+                    s.motionVectorsEnabled = entry.motionVectorsEnabled;
+                    s.motionGraphEnabled = entry.motionGraphEnabled;
                     s.motionGraphSensitivity = entry.motionGraphSensitivity;
-                    s.faceDetectionEnabled   = entry.faceDetectionEnabled;
-                    s.overlayEnabled         = entry.overlayEnabled;
-                    s.recordCodec            = entry.recordCodec;
-                    s.recordFormat           = entry.recordFormat;
-                    s.recordFps              = entry.recordFps;
-                    s.autoRecordEnabled      = entry.autoRecordEnabled;
-                    s.autoRecordThreshold    = entry.autoRecordThreshold;
-                    s.autoRecordTimeout      = entry.autoRecordTimeout;
+                    s.faceDetectionEnabled = entry.faceDetectionEnabled;
+                    s.overlayEnabled = entry.overlayEnabled;
+                    s.recordCodec = entry.recordCodec;
+                    s.recordFormat = entry.recordFormat;
+                    s.recordFps = entry.recordFps;
+                    s.autoRecordEnabled = entry.autoRecordEnabled;
+                    s.autoRecordThreshold = entry.autoRecordThreshold;
+                    s.autoRecordTimeout = entry.autoRecordTimeout;
                 });
 
                 // Set camera name in the line edit
@@ -151,26 +151,26 @@ MainWindow::~MainWindow()
         if (tab) {
             StreamState st = StreamStateManager::instance().stateCopy(tab->streamId());
             StreamStateManager::TabEntry entry;
-            entry.url                    = st.rtspUrl;
-            entry.cameraName             = st.cameraName;
-            entry.blurAmount             = st.blurAmount;
-            entry.grayscaleEnabled       = st.grayscaleEnabled;
-            entry.brightnessAmount       = st.brightnessAmount;
-            entry.contrastAmount         = st.contrastAmount;
-            entry.colorTemperature       = st.colorTemperature;
+            entry.url = st.rtspUrl;
+            entry.cameraName = st.cameraName;
+            entry.blurAmount = st.blurAmount;
+            entry.grayscaleEnabled = st.grayscaleEnabled;
+            entry.brightnessAmount = st.brightnessAmount;
+            entry.contrastAmount = st.contrastAmount;
+            entry.colorTemperature = st.colorTemperature;
             entry.motionDetectionEnabled = st.motionDetectionEnabled;
-            entry.motionSensitivity      = st.motionSensitivity;
-            entry.motionVectorsEnabled   = st.motionVectorsEnabled;
-            entry.motionGraphEnabled     = st.motionGraphEnabled;
+            entry.motionSensitivity = st.motionSensitivity;
+            entry.motionVectorsEnabled = st.motionVectorsEnabled;
+            entry.motionGraphEnabled = st.motionGraphEnabled;
             entry.motionGraphSensitivity = st.motionGraphSensitivity;
-            entry.faceDetectionEnabled   = st.faceDetectionEnabled;
-            entry.overlayEnabled         = st.overlayEnabled;
-            entry.recordCodec            = st.recordCodec;
-            entry.recordFormat           = st.recordFormat;
-            entry.recordFps              = st.recordFps;
-            entry.autoRecordEnabled      = st.autoRecordEnabled;
-            entry.autoRecordThreshold    = st.autoRecordThreshold;
-            entry.autoRecordTimeout      = st.autoRecordTimeout;
+            entry.faceDetectionEnabled = st.faceDetectionEnabled;
+            entry.overlayEnabled = st.overlayEnabled;
+            entry.recordCodec = st.recordCodec;
+            entry.recordFormat = st.recordFormat;
+            entry.recordFps = st.recordFps;
+            entry.autoRecordEnabled = st.autoRecordEnabled;
+            entry.autoRecordThreshold = st.autoRecordThreshold;
+            entry.autoRecordTimeout = st.autoRecordTimeout;
             tabs.append(entry);
         }
     }
@@ -182,7 +182,8 @@ MainWindow::~MainWindow()
     // Shut down all tabs (disconnects signals first, so no callbacks into dead objects)
     for (int i = 0; i < m_tabs->count(); ++i) {
         auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i));
-        if (tab) tab->shutDown();
+        if (tab)
+            tab->shutDown();
     }
     StreamStateManager::instance().saveSettings();
 }
@@ -192,7 +193,8 @@ MainWindow::~MainWindow()
 // ─────────────────────────────────────────────────────────────────────────────
 void MainWindow::addNewTab()
 {
-    if (m_tabs->count() >= StreamStateManager::MaxTabs) return;
+    if (m_tabs->count() >= StreamStateManager::MaxTabs)
+        return;
 
     int id = StreamStateManager::instance().createStream();
     auto *tab = new StreamTab(id, this);
@@ -222,7 +224,8 @@ void MainWindow::addNewTab()
 
 void MainWindow::closeTab(int index)
 {
-    if (m_tabs->count() <= 1) return;   // keep at least one
+    if (m_tabs->count() <= 1)
+        return; // keep at least one
 
     auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(index));
     if (tab) {

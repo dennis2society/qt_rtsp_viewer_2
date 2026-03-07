@@ -2,19 +2,20 @@
 #include "opencvprocessor.h"
 #include "streamstatemanager.h"
 
-#include <QVideoFrame>
-#include <QPainter>
-#include <QDir>
 #include <QDateTime>
+#include <QDir>
+#include <QPainter>
 #include <QRegularExpression>
 #include <QTimer>
+#include <QVideoFrame>
 
 // ─────────────────────────────────────────────────────────────────────────────
 VideoWorker::VideoWorker(int streamId, QObject *parent)
-    : QObject(parent), m_streamId(streamId)
+    : QObject(parent)
+    , m_streamId(streamId)
 {
     m_processor = new OpenCVProcessor();
-    m_fpsTimer  = QDateTime::currentDateTime();
+    m_fpsTimer = QDateTime::currentDateTime();
 
     // Zero-interval timer drives frame processing on this thread's event loop.
     // It fires whenever the loop is idle, which naturally rate-limits processing
@@ -32,9 +33,18 @@ VideoWorker::~VideoWorker()
 // ─────────────────────────────────────────────────────────────────────────────
 // Slots
 // ─────────────────────────────────────────────────────────────────────────────
-void VideoWorker::setPaused(bool p)   { m_paused = p; }
-void VideoWorker::setStreamActive(bool a) { m_streamActive = a; }
-void VideoWorker::setRecording(bool on)  { m_recording = on; }
+void VideoWorker::setPaused(bool p)
+{
+    m_paused = p;
+}
+void VideoWorker::setStreamActive(bool a)
+{
+    m_streamActive = a;
+}
+void VideoWorker::setRecording(bool on)
+{
+    m_recording = on;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Frame submission (runs on multimedia thread — must be fast)
@@ -52,7 +62,8 @@ void VideoWorker::submitFrame(const QVideoFrame &frame)
 // ─────────────────────────────────────────────────────────────────────────────
 void VideoWorker::processPendingFrame()
 {
-    if (!m_hasNewFrame.load(std::memory_order_acquire)) return;
+    if (!m_hasNewFrame.load(std::memory_order_acquire))
+        return;
 
     QVideoFrame frame;
     {
@@ -70,7 +81,8 @@ void VideoWorker::processPendingFrame()
 // ─────────────────────────────────────────────────────────────────────────────
 void VideoWorker::processFrame(const QVideoFrame &frame)
 {
-    if (!m_streamActive) return;
+    if (!m_streamActive)
+        return;
 
     // FPS bookkeeping
     ++m_frameCount;
@@ -95,7 +107,8 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
     f.map(QVideoFrame::ReadOnly);
     QImage image = f.toImage();
     f.unmap();
-    if (image.isNull()) return;
+    if (image.isNull())
+        return;
 
     // ── Read effect state (thread-safe snapshot) ────────────────────
     StreamState st;
@@ -105,8 +118,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     // 1. Brightness / Contrast
     if (st.brightnessAmount != 0 || st.contrastAmount != 0)
-        image = m_processor->applyBrightnessContrast(image, st.brightnessAmount,
-                                                      st.contrastAmount);
+        image = m_processor->applyBrightnessContrast(image, st.brightnessAmount, st.contrastAmount);
 
     // 2. Colour temperature
     if (st.colorTemperature != 0)
@@ -114,8 +126,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     // 3. Grayscale
     if (st.grayscaleEnabled)
-        image = image.convertToFormat(QImage::Format_Grayscale8)
-                      .convertToFormat(QImage::Format_RGB888);
+        image = image.convertToFormat(QImage::Format_Grayscale8).convertToFormat(QImage::Format_RGB888);
 
     // 4. Blur
     if (st.blurAmount > 0)
@@ -126,13 +137,11 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     // 6. Motion detection overlay
     if (st.motionDetectionEnabled)
-        image = m_processor->applyMotionDetectionOverlay(
-            image, cleanImage, m_cleanPrevious, st.motionSensitivity);
+        image = m_processor->applyMotionDetectionOverlay(image, cleanImage, m_cleanPrevious, st.motionSensitivity);
 
     // 7. Motion vectors overlay
     if (st.motionVectorsEnabled)
-        image = m_processor->applyMotionVectorsOverlay(
-            image, cleanImage, m_cleanPrevious);
+        image = m_processor->applyMotionVectorsOverlay(image, cleanImage, m_cleanPrevious);
 
     // 8. Face detection overlay
     if (st.faceDetectionEnabled)
@@ -141,14 +150,12 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
     // 9. Motion level (for graph + auto-record)
     double motionLevel = 0.0;
     if (st.motionGraphEnabled || st.autoRecordEnabled) {
-        motionLevel = m_processor->computeMotionLevel(
-            cleanImage, m_cleanPrevious, st.motionGraphSensitivity);
+        motionLevel = m_processor->computeMotionLevel(cleanImage, m_cleanPrevious, st.motionGraphSensitivity);
     }
 
     // 10. Grid motion overlay
     if (st.motionGraphEnabled)
-        image = m_processor->applyGridMotionOverlay(
-            image, cleanImage, m_cleanPrevious, st.motionGraphSensitivity);
+        image = m_processor->applyGridMotionOverlay(image, cleanImage, m_cleanPrevious, st.motionGraphSensitivity);
 
     // 11. Motion graph overlay
     if (st.motionGraphEnabled)
@@ -156,7 +163,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     // 12. Save clean frame for next iteration
     m_cleanPrevious = cleanImage;
-    m_frozenFrame   = image;
+    m_frozenFrame = image;
 
     // 13. FPS / resolution / datetime overlay
     if (st.overlayEnabled)
@@ -179,15 +186,16 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 void VideoWorker::paintFpsOverlay(QImage &img)
 {
     QPainter p(&img);
-    p.setPen(QPen(QColor(0, 255, 0), 2));  // Bright green with 2px width for better visibility
+    p.setPen(QPen(QColor(0, 255, 0), 2)); // Bright green with 2px width for better visibility
     p.setFont(QFont(QStringLiteral("Monospace"), 13, QFont::Bold));
 
     QString fps = QStringLiteral("FPS: %1").arg(m_fps, 0, 'f', 1);
     QString res = QStringLiteral("Res: %1×%2").arg(img.width()).arg(img.height());
-    QString dt  = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
+    QString dt = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
 
     int x = img.width() - 240, y = 20;
-    if (x < 10) x = 10;
+    if (x < 10)
+        x = 10;
 
     // Background box
     p.fillRect(x - 4, y - 14, 234, 52, QColor(0, 0, 0, 160));
@@ -217,27 +225,25 @@ void VideoWorker::handleAutoRecord(double motionLevel)
         if (!m_autoRecording && !m_recording) {
             // Start auto-recording
             QString folder = StreamStateManager::instance().outputFolder();
-            if (folder.isEmpty()) return;
+            if (folder.isEmpty())
+                return;
 
-            QString ts = QDateTime::currentDateTime().toString(
-                QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
+            QString ts = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
             QString cam = st.cameraName;
-            cam.replace(QRegularExpression(QStringLiteral("[^a-zA-Z0-9_-]")),
-                        QStringLiteral("_"));
+            cam.replace(QRegularExpression(QStringLiteral("[^a-zA-Z0-9_-]")), QStringLiteral("_"));
             QString ext = st.recordFormat;
-            QString path = QStringLiteral("%1/%2_%3_motion.%4")
-                               .arg(folder, ts, cam, ext);
+            QString path = QStringLiteral("%1/%2_%3_motion.%4").arg(folder, ts, cam, ext);
 
-            m_recPath    = path;
-            m_recCodec   = st.recordCodec;
-            m_recFps     = st.recordFps;
-            m_recording  = true;
-            m_autoRecording   = true;
+            m_recPath = path;
+            m_recCodec = st.recordCodec;
+            m_recFps = st.recordFps;
+            m_recording = true;
+            m_autoRecording = true;
             m_autoRecStartTime = QDateTime::currentDateTime();
 
             StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
                 s.isAutoRecording = true;
-                s.isRecording     = true;
+                s.isRecording = true;
             });
 
             // Tell RecordingWorker to open a file
@@ -251,11 +257,11 @@ void VideoWorker::handleAutoRecord(double motionLevel)
         if (nowMs - m_lastMotionAboveMs > timeoutMs) {
             // Motion below threshold for the full timeout → stop
             QString path = m_recPath;
-            m_recording     = false;
+            m_recording = false;
             m_autoRecording = false;
 
             StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
-                s.isRecording     = false;
+                s.isRecording = false;
                 s.isAutoRecording = false;
             });
 

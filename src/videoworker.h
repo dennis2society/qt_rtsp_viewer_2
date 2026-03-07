@@ -1,10 +1,10 @@
 #pragma once
 
-#include <QObject>
-#include <QImage>
 #include <QDateTime>
-#include <QVideoFrame>
+#include <QImage>
 #include <QMutex>
+#include <QObject>
+#include <QVideoFrame>
 #include <atomic>
 
 class OpenCVProcessor;
@@ -18,7 +18,8 @@ class QTimer;
 /// Frame delivery uses a "latest frame" pattern: incoming frames are stored
 /// atomically and only the most recent frame is processed, preventing queue
 /// build-up and display latency.
-class VideoWorker : public QObject {
+class VideoWorker : public QObject
+{
     Q_OBJECT
 
 public:
@@ -44,8 +45,7 @@ signals:
     void frameForRecording(const QImage &image);
 
     /// Auto-record requests — connected to RecordingWorker via VideoPlayer
-    void startRecordingRequested(const QString &path, const QString &codec,
-                                 double fps);
+    void startRecordingRequested(const QString &path, const QString &codec, double fps);
     void stopRecordingRequested();
 
     void autoRecordingStarted(const QString &path);
@@ -61,34 +61,34 @@ private:
     void paintFpsOverlay(QImage &img);
     void handleAutoRecord(double motionLevel);
 
-    int                  m_streamId;
-    OpenCVProcessor     *m_processor = nullptr;
+    int m_streamId;
+    OpenCVProcessor *m_processor = nullptr;
 
-    bool                 m_paused       = false;
-    bool                 m_streamActive = false;
+    bool m_paused = false;
+    bool m_streamActive = false;
 
     // FPS counter
-    int                  m_frameCount = 0;
-    double               m_fps        = 0.0;
-    QDateTime            m_fpsTimer;
+    int m_frameCount = 0;
+    double m_fps = 0.0;
+    QDateTime m_fpsTimer;
 
     // Clean-frame bookkeeping (for detection algorithms)
-    QImage               m_cleanPrevious;
-    QImage               m_frozenFrame;
+    QImage m_cleanPrevious;
+    QImage m_frozenFrame;
 
     // ── Latest-frame storage (written by multimedia thread) ─────────
-    QMutex               m_frameMutex;
-    QVideoFrame          m_pendingFrame;
-    std::atomic<bool>    m_hasNewFrame{false};
+    QMutex m_frameMutex;
+    QVideoFrame m_pendingFrame;
+    std::atomic<bool> m_hasNewFrame{false};
 
     // ── Recording awareness (no FFmpeg) ─────────────────────────────
-    bool    m_recording      = false;
+    bool m_recording = false;
     QString m_recPath;
     QString m_recCodec;
-    double  m_recFps         = 25.0;
+    double m_recFps = 25.0;
 
     // ── Auto-record ─────────────────────────────────────────────────
-    bool      m_autoRecording    = false;
+    bool m_autoRecording = false;
     QDateTime m_autoRecStartTime;
-    qint64    m_lastMotionAboveMs = 0;
+    qint64 m_lastMotionAboveMs = 0;
 };

@@ -1,23 +1,24 @@
 #include "streamtab.h"
-#include "videoplayer.h"
 #include "recorddialog.h"
 #include "streamstatemanager.h"
+#include "videoplayer.h"
 
-#include <QVBoxLayout>
-#include <QHBoxLayout>
 #include <QComboBox>
-#include <QLineEdit>
-#include <QPushButton>
-#include <QFrame>
-#include <QStyle>
 #include <QDateTime>
 #include <QDir>
-#include <QRegularExpression>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QLineEdit>
 #include <QMessageBox>
+#include <QPushButton>
+#include <QRegularExpression>
+#include <QStyle>
+#include <QVBoxLayout>
 
 // ─────────────────────────────────────────────────────────────────────────────
 StreamTab::StreamTab(int streamId, QWidget *parent)
-    : QWidget(parent), m_streamId(streamId)
+    : QWidget(parent)
+    , m_streamId(streamId)
 {
     auto *mainLay = new QVBoxLayout(this);
     mainLay->setContentsMargins(4, 4, 4, 0);
@@ -41,9 +42,11 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
     m_cameraNameEdit->setText(st.cameraName);
 
-    auto *sep1 = new QFrame; sep1->setFrameShape(QFrame::VLine); sep1->setFrameShadow(QFrame::Sunken);
+    auto *sep1 = new QFrame;
+    sep1->setFrameShape(QFrame::VLine);
+    sep1->setFrameShadow(QFrame::Sunken);
 
-    m_playBtn  = new QPushButton;
+    m_playBtn = new QPushButton;
     m_playBtn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
     m_playBtn->setToolTip(QStringLiteral("Play"));
 
@@ -52,11 +55,13 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     m_pauseBtn->setCheckable(true);
     m_pauseBtn->setToolTip(QStringLiteral("Pause"));
 
-    m_stopBtn  = new QPushButton;
+    m_stopBtn = new QPushButton;
     m_stopBtn->setIcon(style()->standardIcon(QStyle::SP_MediaStop));
     m_stopBtn->setToolTip(QStringLiteral("Stop"));
 
-    auto *sep2 = new QFrame; sep2->setFrameShape(QFrame::VLine); sep2->setFrameShadow(QFrame::Sunken);
+    auto *sep2 = new QFrame;
+    sep2->setFrameShape(QFrame::VLine);
+    sep2->setFrameShadow(QFrame::Sunken);
 
     m_recordBtn = new QPushButton(QStringLiteral("⏺ Record"));
     m_recordBtn->setCheckable(true);
@@ -82,11 +87,11 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     updateButtonStates();
 
     // ── Connections ─────────────────────────────────────────────────
-    connect(m_playBtn,  &QPushButton::clicked,  this, &StreamTab::onPlayClicked);
-    connect(m_stopBtn,  &QPushButton::clicked,  this, &StreamTab::onStopClicked);
-    connect(m_pauseBtn, &QPushButton::toggled,  this, &StreamTab::onPauseToggled);
-    connect(m_recordBtn,&QPushButton::toggled,  this, &StreamTab::onRecordToggled);
-    connect(m_removeBtn,&QPushButton::clicked,  this, &StreamTab::onRemoveUrlClicked);
+    connect(m_playBtn, &QPushButton::clicked, this, &StreamTab::onPlayClicked);
+    connect(m_stopBtn, &QPushButton::clicked, this, &StreamTab::onStopClicked);
+    connect(m_pauseBtn, &QPushButton::toggled, this, &StreamTab::onPauseToggled);
+    connect(m_recordBtn, &QPushButton::toggled, this, &StreamTab::onRecordToggled);
+    connect(m_removeBtn, &QPushButton::clicked, this, &StreamTab::onRemoveUrlClicked);
 
     connect(m_cameraNameEdit, &QLineEdit::textChanged, this, &StreamTab::onCameraNameEdited);
 
@@ -142,8 +147,9 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     });
 
     // React to global URL history changes (refresh combo)
-    connect(&StreamStateManager::instance(), &StreamStateManager::globalSettingsChanged,
-            this, [this]() { populateUrlCombo(); });
+    connect(&StreamStateManager::instance(), &StreamStateManager::globalSettingsChanged, this, [this]() {
+        populateUrlCombo();
+    });
 }
 
 StreamTab::~StreamTab()
@@ -154,7 +160,8 @@ StreamTab::~StreamTab()
 // ─────────────────────────────────────────────────────────────────────────────
 void StreamTab::shutDown()
 {
-    if (m_isShutDown) return;
+    if (m_isShutDown)
+        return;
     m_isShutDown = true;
 
     // Disconnect all signals to prevent callbacks into partially-destroyed objects
@@ -186,7 +193,8 @@ void StreamTab::populateUrlCombo()
 void StreamTab::onPlayClicked()
 {
     QString url = m_urlCombo->currentText().trimmed();
-    if (url.isEmpty()) return;
+    if (url.isEmpty())
+        return;
 
     // Save to history
     QString cam = m_cameraNameEdit->text().trimmed();
@@ -200,7 +208,7 @@ void StreamTab::onPlayClicked()
 
     // Update stream state
     StreamStateManager::instance().modifyState(m_streamId, [&](StreamState &s) {
-        s.rtspUrl    = url;
+        s.rtspUrl = url;
         s.cameraName = cam;
     });
 
@@ -254,12 +262,11 @@ void StreamTab::onRecordToggled(bool checked)
 
         if (folder.isEmpty()) {
             // Show error message
-            QMessageBox::warning(
-                this,
-                QStringLiteral("Output Folder Not Set"),
-                QStringLiteral("Please set an output folder in the sidebar (Global section) "
-                               "before recording."),
-                QMessageBox::Ok);
+            QMessageBox::warning(this,
+                                 QStringLiteral("Output Folder Not Set"),
+                                 QStringLiteral("Please set an output folder in the sidebar (Global section) "
+                                                "before recording."),
+                                 QMessageBox::Ok);
             m_recordBtn->blockSignals(true);
             m_recordBtn->setChecked(false);
             m_recordBtn->blockSignals(false);
@@ -268,7 +275,7 @@ void StreamTab::onRecordToggled(bool checked)
 
         // Auto-generate path
         QDir().mkpath(folder);
-        QString ts  = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
+        QString ts = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
         QString cam = st.cameraName;
         cam.replace(QRegularExpression(QStringLiteral("[^a-zA-Z0-9_-]")), QStringLiteral("_"));
         QString ext = st.recordFormat;
@@ -286,7 +293,8 @@ void StreamTab::onRecordToggled(bool checked)
 void StreamTab::onRemoveUrlClicked()
 {
     QString url = m_urlCombo->currentText().trimmed();
-    if (url.isEmpty()) return;
+    if (url.isEmpty())
+        return;
 
     // Stop playback and recording
     m_player->stopRecording();
@@ -325,8 +333,7 @@ void StreamTab::onUrlChanged(const QString &url)
 void StreamTab::updateButtonStates()
 {
     StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
-    bool playing = (st.playbackState == PlaybackState::Playing ||
-                    st.playbackState == PlaybackState::Paused);
+    bool playing = (st.playbackState == PlaybackState::Playing || st.playbackState == PlaybackState::Paused);
 
     m_playBtn->setEnabled(!playing);
     m_stopBtn->setEnabled(playing);

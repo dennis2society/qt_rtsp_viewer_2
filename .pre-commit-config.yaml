@@ -1,0 +1,23 @@
+repos:
+  - repo: local
+    hooks: 
+      #----------------#
+      # Cpp checks
+      - id: clang-format
+        name: clang-format
+        description: runs clang-format on a predefined sets of files
+        language: system
+        entry: clang-format -i
+        types_or: [c++, c, c#, cuda, proto]
+      #- id: clang-tidy
+      #  name: clang-tidy
+      #  description: runs clang-tidy on C/C++ files
+      #  language: system
+      #  entry: clang-tidy
+      #  types_or: [c++, c]
+      - id: cppcheck
+        name: cppcheck
+        description: runs cppcheck on C/C++ files
+        language: system
+        entry: cppcheck --enable=all --quiet
+        types_or: [c++, c]

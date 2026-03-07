@@ -1,20 +1,21 @@
 #include "effectssidebar.h"
 #include "streamstatemanager.h"
 
-#include <QVBoxLayout>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QSlider>
 #include <QCheckBox>
 #include <QComboBox>
-#include <QPushButton>
-#include <QSpinBox>
-#include <QGroupBox>
 #include <QFileDialog>
 #include <QFrame>
+#include <QGroupBox>
+#include <QHBoxLayout>
+#include <QLabel>
+#include <QPushButton>
+#include <QSlider>
+#include <QSpinBox>
+#include <QVBoxLayout>
 
 // ─────────────────────────────────────────────────────────────────────────────
-EffectsSidebar::EffectsSidebar(QWidget *parent) : QWidget(parent)
+EffectsSidebar::EffectsSidebar(QWidget *parent)
+    : QWidget(parent)
 {
     setupUI();
     connectSlots();
@@ -153,7 +154,7 @@ void EffectsSidebar::setupUI()
 
     // ── Global output folder ────────────────────────────────────────
     addLabel(QStringLiteral("Output Folder (global)"));
-    m_outputFolderBtn   = new QPushButton(QStringLiteral("Select Folder…"));
+    m_outputFolderBtn = new QPushButton(QStringLiteral("Select Folder…"));
     m_outputFolderLabel = new QLabel;
     m_outputFolderLabel->setWordWrap(true);
     m_outputFolderLabel->setStyleSheet(QStringLiteral("color:gray;"));
@@ -181,21 +182,23 @@ void EffectsSidebar::setupUI()
 // ─────────────────────────────────────────────────────────────────────────────
 void EffectsSidebar::connectSlots()
 {
-    auto changed = [this]() { pushState(); };
+    auto changed = [this]() {
+        pushState();
+    };
 
-    connect(m_blurSlider,           &QSlider::valueChanged, this, changed);
-    connect(m_grayscaleCheck,       &QCheckBox::toggled,    this, changed);
-    connect(m_brightnessSlider,     &QSlider::valueChanged, this, changed);
-    connect(m_contrastSlider,       &QSlider::valueChanged, this, changed);
-    connect(m_colorTempSlider,      &QSlider::valueChanged, this, changed);
-    connect(m_motionDetCheck,       &QCheckBox::toggled,    this, changed);
-    connect(m_motionSensSlider,     &QSlider::valueChanged, this, changed);
-    connect(m_motionVecCheck,       &QCheckBox::toggled,    this, changed);
-    connect(m_motionGraphCheck,     &QCheckBox::toggled,    this, changed);
-    connect(m_motionGraphSensSlider,&QSlider::valueChanged, this, changed);
-    connect(m_faceDetCheck,         &QCheckBox::toggled,    this, changed);
-    connect(m_overlayCheck,         &QCheckBox::toggled,    this, changed);
-    connect(m_codecCombo,  QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
+    connect(m_blurSlider, &QSlider::valueChanged, this, changed);
+    connect(m_grayscaleCheck, &QCheckBox::toggled, this, changed);
+    connect(m_brightnessSlider, &QSlider::valueChanged, this, changed);
+    connect(m_contrastSlider, &QSlider::valueChanged, this, changed);
+    connect(m_colorTempSlider, &QSlider::valueChanged, this, changed);
+    connect(m_motionDetCheck, &QCheckBox::toggled, this, changed);
+    connect(m_motionSensSlider, &QSlider::valueChanged, this, changed);
+    connect(m_motionVecCheck, &QCheckBox::toggled, this, changed);
+    connect(m_motionGraphCheck, &QCheckBox::toggled, this, changed);
+    connect(m_motionGraphSensSlider, &QSlider::valueChanged, this, changed);
+    connect(m_faceDetCheck, &QCheckBox::toggled, this, changed);
+    connect(m_overlayCheck, &QCheckBox::toggled, this, changed);
+    connect(m_codecCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
     connect(m_formatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
 
     connect(m_autoRecCheck, &QCheckBox::toggled, this, [this](bool on) {
@@ -213,10 +216,9 @@ void EffectsSidebar::connectSlots()
 
     // Global output folder
     connect(m_outputFolderBtn, &QPushButton::clicked, this, [this]() {
-        QString dir = QFileDialog::getExistingDirectory(
-            this, QStringLiteral("Select Output Folder"),
-            StreamStateManager::instance().outputFolder());
-        if (dir.isEmpty()) return;
+        QString dir = QFileDialog::getExistingDirectory(this, QStringLiteral("Select Output Folder"), StreamStateManager::instance().outputFolder());
+        if (dir.isEmpty())
+            return;
         StreamStateManager::instance().setOutputFolder(dir);
         m_outputFolderLabel->setText(dir);
     });
@@ -249,31 +251,29 @@ void EffectsSidebar::connectSlots()
     });
 
     // React to global settings changes (e.g. output folder changed elsewhere)
-    connect(&StreamStateManager::instance(), &StreamStateManager::globalSettingsChanged,
-            this, [this]() {
-                QString f = StreamStateManager::instance().outputFolder();
-                m_outputFolderLabel->setText(f.isEmpty() ? QStringLiteral("(not set)") : f);
-            });
+    connect(&StreamStateManager::instance(), &StreamStateManager::globalSettingsChanged, this, [this]() {
+        QString f = StreamStateManager::instance().outputFolder();
+        m_outputFolderLabel->setText(f.isEmpty() ? QStringLiteral("(not set)") : f);
+    });
 
     // React to stream state changes (e.g. auto-recording started/stopped)
-    connect(&StreamStateManager::instance(), &StreamStateManager::streamStateChanged,
-            this, [this](int streamId) {
-                if (streamId != m_boundStream) return;
-                StreamState st;
-                StreamStateManager::instance().readState(streamId, [&](const StreamState &s) {
-                    st = s;
-                });
-                if (st.isAutoRecording) {
-                    m_autoRecStatusLabel->setText(QStringLiteral("⏺ Auto-recording in progress"));
-                    m_autoRecStatusLabel->setStyleSheet(
-                        QStringLiteral("color:white;background-color:#c62828;padding:4px;font-weight:bold;"));
-                    m_autoRecStatusLabel->setVisible(true);
-                } else {
-                    m_autoRecStatusLabel->setText(QString());
-                    m_autoRecStatusLabel->setStyleSheet(QString());
-                    m_autoRecStatusLabel->setVisible(false);
-                }
-            });
+    connect(&StreamStateManager::instance(), &StreamStateManager::streamStateChanged, this, [this](int streamId) {
+        if (streamId != m_boundStream)
+            return;
+        StreamState st;
+        StreamStateManager::instance().readState(streamId, [&](const StreamState &s) {
+            st = s;
+        });
+        if (st.isAutoRecording) {
+            m_autoRecStatusLabel->setText(QStringLiteral("⏺ Auto-recording in progress"));
+            m_autoRecStatusLabel->setStyleSheet(QStringLiteral("color:white;background-color:#c62828;padding:4px;font-weight:bold;"));
+            m_autoRecStatusLabel->setVisible(true);
+        } else {
+            m_autoRecStatusLabel->setText(QString());
+            m_autoRecStatusLabel->setStyleSheet(QString());
+            m_autoRecStatusLabel->setVisible(false);
+        }
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -305,11 +305,13 @@ void EffectsSidebar::bindToStream(int streamId)
 
     // Codec
     int ci = m_codecCombo->findData(st.recordCodec);
-    if (ci >= 0) m_codecCombo->setCurrentIndex(ci);
+    if (ci >= 0)
+        m_codecCombo->setCurrentIndex(ci);
 
     // Format
     int fi = m_formatCombo->findData(st.recordFormat);
-    if (fi >= 0) m_formatCombo->setCurrentIndex(fi);
+    if (fi >= 0)
+        m_formatCombo->setCurrentIndex(fi);
 
     // Auto-record
     m_autoRecCheck->setChecked(st.autoRecordEnabled);
@@ -327,8 +329,7 @@ void EffectsSidebar::bindToStream(int streamId)
     // Auto-record status
     if (st.isAutoRecording) {
         m_autoRecStatusLabel->setText(QStringLiteral("⏺ Auto-recording in progress"));
-        m_autoRecStatusLabel->setStyleSheet(
-            QStringLiteral("color:white;background-color:#c62828;padding:4px;font-weight:bold;"));
+        m_autoRecStatusLabel->setStyleSheet(QStringLiteral("color:white;background-color:#c62828;padding:4px;font-weight:bold;"));
         m_autoRecStatusLabel->setVisible(true);
     } else {
         m_autoRecStatusLabel->setText(QString());
@@ -344,28 +345,29 @@ void EffectsSidebar::bindToStream(int streamId)
 // ─────────────────────────────────────────────────────────────────────────────
 void EffectsSidebar::pushState()
 {
-    if (m_boundStream < 0) return;
+    if (m_boundStream < 0)
+        return;
 
     int streamId = m_boundStream;
 
     StreamStateManager::instance().modifyState(streamId, [this](StreamState &s) {
-        s.blurAmount              = m_blurSlider->value();
-        s.grayscaleEnabled        = m_grayscaleCheck->isChecked();
-        s.brightnessAmount        = m_brightnessSlider->value();
-        s.contrastAmount          = m_contrastSlider->value();
-        s.colorTemperature        = m_colorTempSlider->value();
-        s.motionDetectionEnabled  = m_motionDetCheck->isChecked();
-        s.motionSensitivity       = m_motionSensSlider->value();
-        s.motionVectorsEnabled    = m_motionVecCheck->isChecked();
-        s.motionGraphEnabled      = m_motionGraphCheck->isChecked();
-        s.motionGraphSensitivity  = m_motionGraphSensSlider->value();
-        s.faceDetectionEnabled    = m_faceDetCheck->isChecked();
-        s.overlayEnabled          = m_overlayCheck->isChecked();
-        s.recordCodec             = m_codecCombo->currentData().toString();
-        s.recordFormat            = m_formatCombo->currentData().toString();
-        s.autoRecordEnabled       = m_autoRecCheck->isChecked();
-        s.autoRecordThreshold     = m_thresholdSlider->value() / 100.0;
-        s.autoRecordTimeout       = m_timeoutSpin->value();
+        s.blurAmount = m_blurSlider->value();
+        s.grayscaleEnabled = m_grayscaleCheck->isChecked();
+        s.brightnessAmount = m_brightnessSlider->value();
+        s.contrastAmount = m_contrastSlider->value();
+        s.colorTemperature = m_colorTempSlider->value();
+        s.motionDetectionEnabled = m_motionDetCheck->isChecked();
+        s.motionSensitivity = m_motionSensSlider->value();
+        s.motionVectorsEnabled = m_motionVecCheck->isChecked();
+        s.motionGraphEnabled = m_motionGraphCheck->isChecked();
+        s.motionGraphSensitivity = m_motionGraphSensSlider->value();
+        s.faceDetectionEnabled = m_faceDetCheck->isChecked();
+        s.overlayEnabled = m_overlayCheck->isChecked();
+        s.recordCodec = m_codecCombo->currentData().toString();
+        s.recordFormat = m_formatCombo->currentData().toString();
+        s.autoRecordEnabled = m_autoRecCheck->isChecked();
+        s.autoRecordThreshold = m_thresholdSlider->value() / 100.0;
+        s.autoRecordTimeout = m_timeoutSpin->value();
     });
 
     emit effectsChanged(streamId);

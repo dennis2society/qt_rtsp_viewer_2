@@ -9,15 +9,22 @@ class QPushButton;
 
 /// One tab per stream.  Contains the URL bar, transport controls,
 /// record button, and a VideoPlayer widget.
-class StreamTab : public QWidget {
+class StreamTab : public QWidget
+{
     Q_OBJECT
 
 public:
     explicit StreamTab(int streamId, QWidget *parent = nullptr);
     ~StreamTab() override;
 
-    int          streamId() const { return m_streamId; }
-    VideoPlayer *videoPlayer() const { return m_player; }
+    int streamId() const
+    {
+        return m_streamId;
+    }
+    VideoPlayer *videoPlayer() const
+    {
+        return m_player;
+    }
 
     /// Stop playback + recording (called when tab is about to be closed).
     void shutDown();
@@ -40,16 +47,16 @@ private:
     void populateUrlCombo();
     void updateButtonStates();
 
-    int           m_streamId;
-    bool          m_isShutDown = false;
+    int m_streamId;
+    bool m_isShutDown = false;
 
     // UI
-    QComboBox    *m_urlCombo       = nullptr;
-    QPushButton  *m_removeBtn      = nullptr;
-    QLineEdit    *m_cameraNameEdit = nullptr;
-    QPushButton  *m_playBtn        = nullptr;
-    QPushButton  *m_pauseBtn       = nullptr;
-    QPushButton  *m_stopBtn        = nullptr;
-    QPushButton  *m_recordBtn      = nullptr;
-    VideoPlayer  *m_player         = nullptr;
+    QComboBox *m_urlCombo = nullptr;
+    QPushButton *m_removeBtn = nullptr;
+    QLineEdit *m_cameraNameEdit = nullptr;
+    QPushButton *m_playBtn = nullptr;
+    QPushButton *m_pauseBtn = nullptr;
+    QPushButton *m_stopBtn = nullptr;
+    QPushButton *m_recordBtn = nullptr;
+    VideoPlayer *m_player = nullptr;
 };

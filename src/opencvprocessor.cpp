@@ -25,15 +25,15 @@ OpenCVProcessor::OpenCVProcessor()
 cv::Mat OpenCVProcessor::qImageToMat(const QImage &img)
 {
     QImage tmp = img;
-    if (tmp.format() != QImage::Format_RGB888 &&
-        tmp.format() != QImage::Format_Grayscale8)
+    if (tmp.format() != QImage::Format_RGB888 && tmp.format() != QImage::Format_Grayscale8)
         tmp = tmp.convertToFormat(QImage::Format_RGB888);
 
-    cv::Mat mat(tmp.height(), tmp.width(),
+    cv::Mat mat(tmp.height(),
+                tmp.width(),
                 tmp.format() == QImage::Format_Grayscale8 ? CV_8UC1 : CV_8UC3,
                 const_cast<uchar *>(tmp.constBits()),
                 static_cast<size_t>(tmp.bytesPerLine()));
-    mat.copyTo(m_srcMat);                       // deep copy – detaches from QImage
+    mat.copyTo(m_srcMat); // deep copy – detaches from QImage
     if (m_srcMat.channels() == 3)
         cv::cvtColor(m_srcMat, m_srcMat, cv::COLOR_RGB2BGR);
     return m_srcMat;
@@ -43,11 +43,9 @@ QImage OpenCVProcessor::matToQImage(const cv::Mat &mat, QImage::Format fmt)
 {
     if (mat.channels() == 3) {
         cv::cvtColor(mat, m_rgbMat, cv::COLOR_BGR2RGB);
-        return QImage(m_rgbMat.data, m_rgbMat.cols, m_rgbMat.rows,
-                      static_cast<int>(m_rgbMat.step), fmt).copy();
+        return QImage(m_rgbMat.data, m_rgbMat.cols, m_rgbMat.rows, static_cast<int>(m_rgbMat.step), fmt).copy();
     }
-    return QImage(mat.data, mat.cols, mat.rows,
-                  static_cast<int>(mat.step), QImage::Format_Grayscale8).copy();
+    return QImage(mat.data, mat.cols, mat.rows, static_cast<int>(mat.step), QImage::Format_Grayscale8).copy();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -55,7 +53,8 @@ QImage OpenCVProcessor::matToQImage(const cv::Mat &mat, QImage::Format fmt)
 // ─────────────────────────────────────────────────────────────────────────────
 QImage OpenCVProcessor::applyGaussBlur(const QImage &src, int amount)
 {
-    if (amount <= 0) return src;
+    if (amount <= 0)
+        return src;
     cv::Mat mat = qImageToMat(src);
     int ks = amount * 2 + 1;
     double sigma = amount * 0.5;
@@ -66,14 +65,14 @@ QImage OpenCVProcessor::applyGaussBlur(const QImage &src, int amount)
 // ─────────────────────────────────────────────────────────────────────────────
 // Brightness / Contrast  (LUT-accelerated)
 // ─────────────────────────────────────────────────────────────────────────────
-QImage OpenCVProcessor::applyBrightnessContrast(const QImage &src,
-                                                 int brightness, int contrast)
+QImage OpenCVProcessor::applyBrightnessContrast(const QImage &src, int brightness, int contrast)
 {
-    if (brightness == 0 && contrast == 0) return src;
+    if (brightness == 0 && contrast == 0)
+        return src;
     cv::Mat mat = qImageToMat(src);
 
-    double alpha = 1.0 + contrast / 100.0;     // contrast scale
-    double beta  = brightness;                  // brightness offset
+    double alpha = 1.0 + contrast / 100.0; // contrast scale
+    double beta = brightness; // brightness offset
 
     cv::Mat lut(1, 256, CV_8U);
     uchar *p = lut.ptr();
@@ -95,15 +94,16 @@ QImage OpenCVProcessor::applyBrightnessContrast(const QImage &src,
 // ─────────────────────────────────────────────────────────────────────────────
 QImage OpenCVProcessor::applyColorTemperature(const QImage &src, int temperature)
 {
-    if (temperature == 0) return src;
+    if (temperature == 0)
+        return src;
     cv::Mat mat = qImageToMat(src);
 
-    double t = temperature / 100.0;             // -1.0 … +1.0
+    double t = temperature / 100.0; // -1.0 … +1.0
     double rScale = 1.0, bScale = 1.0;
-    if (t < 0) {                                // warm → boost red, cut blue
+    if (t < 0) { // warm → boost red, cut blue
         rScale = 1.0 - t * 0.30;
         bScale = 1.0 + t * 0.30;
-    } else {                                    // cool → cut red, boost blue
+    } else { // cool → cut red, boost blue
         rScale = 1.0 - t * 0.30;
         bScale = 1.0 + t * 0.30;
     }
@@ -111,9 +111,9 @@ QImage OpenCVProcessor::applyColorTemperature(const QImage &src, int temperature
     cv::Mat lutAll(1, 256, CV_8UC3);
     auto *q = lutAll.ptr<cv::Vec3b>();
     for (int i = 0; i < 256; ++i) {
-        q[i][0] = cv::saturate_cast<uchar>(i * bScale);   // B
-        q[i][1] = cv::saturate_cast<uchar>(i);            // G
-        q[i][2] = cv::saturate_cast<uchar>(i * rScale);   // R
+        q[i][0] = cv::saturate_cast<uchar>(i * bScale); // B
+        q[i][1] = cv::saturate_cast<uchar>(i); // G
+        q[i][2] = cv::saturate_cast<uchar>(i * rScale); // R
     }
 
     cv::LUT(mat, lutAll, m_work1);
@@ -123,20 +123,16 @@ QImage OpenCVProcessor::applyColorTemperature(const QImage &src, int temperature
 // ─────────────────────────────────────────────────────────────────────────────
 // Motion detection overlay (contour-based)
 // ─────────────────────────────────────────────────────────────────────────────
-QImage OpenCVProcessor::applyMotionDetectionOverlay(const QImage &drawTarget,
-                                                     const QImage &cleanCurrent,
-                                                     const QImage &cleanPrevious,
-                                                     int sensitivity)
+QImage OpenCVProcessor::applyMotionDetectionOverlay(const QImage &drawTarget, const QImage &cleanCurrent, const QImage &cleanPrevious, int sensitivity)
 {
-    if (cleanPrevious.isNull()) return drawTarget;
+    if (cleanPrevious.isNull())
+        return drawTarget;
 
     cv::Mat cur = qImageToMat(cleanCurrent);
     cv::Mat prev;
     {
         QImage tmp = cleanPrevious.convertToFormat(QImage::Format_RGB888);
-        cv::Mat raw(tmp.height(), tmp.width(), CV_8UC3,
-                    const_cast<uchar *>(tmp.constBits()),
-                    static_cast<size_t>(tmp.bytesPerLine()));
+        cv::Mat raw(tmp.height(), tmp.width(), CV_8UC3, const_cast<uchar *>(tmp.constBits()), static_cast<size_t>(tmp.bytesPerLine()));
         cv::cvtColor(raw, prev, cv::COLOR_RGB2BGR);
     }
 
@@ -168,19 +164,16 @@ QImage OpenCVProcessor::applyMotionDetectionOverlay(const QImage &drawTarget,
 // ─────────────────────────────────────────────────────────────────────────────
 // Motion vectors overlay (optical flow)
 // ─────────────────────────────────────────────────────────────────────────────
-QImage OpenCVProcessor::applyMotionVectorsOverlay(const QImage &drawTarget,
-                                                    const QImage &cleanCurrent,
-                                                    const QImage &cleanPrevious)
+QImage OpenCVProcessor::applyMotionVectorsOverlay(const QImage &drawTarget, const QImage &cleanCurrent, const QImage &cleanPrevious)
 {
-    if (cleanPrevious.isNull()) return drawTarget;
+    if (cleanPrevious.isNull())
+        return drawTarget;
 
     cv::Mat cur = qImageToMat(cleanCurrent);
     cv::Mat prev;
     {
         QImage tmp = cleanPrevious.convertToFormat(QImage::Format_RGB888);
-        cv::Mat raw(tmp.height(), tmp.width(), CV_8UC3,
-                    const_cast<uchar *>(tmp.constBits()),
-                    static_cast<size_t>(tmp.bytesPerLine()));
+        cv::Mat raw(tmp.height(), tmp.width(), CV_8UC3, const_cast<uchar *>(tmp.constBits()), static_cast<size_t>(tmp.bytesPerLine()));
         cv::cvtColor(raw, prev, cv::COLOR_RGB2BGR);
     }
 
@@ -194,20 +187,20 @@ QImage OpenCVProcessor::applyMotionVectorsOverlay(const QImage &drawTarget,
     cv::resize(grayPrev, smallPrev, cv::Size(), 0.1, 0.1);
 
     cv::Mat flow;
-    cv::calcOpticalFlowFarneback(smallPrev, smallCur, flow,
-                                  0.5, 2, 9, 2, 5, 1.1, 0);
+    cv::calcOpticalFlowFarneback(smallPrev, smallCur, flow, 0.5, 2, 9, 2, 5, 1.1, 0);
 
     QImage result = drawTarget.copy();
     QPainter p(&result);
     p.setRenderHint(QPainter::Antialiasing);
-    const double scaleX = static_cast<double>(result.width())  / smallCur.cols;
+    const double scaleX = static_cast<double>(result.width()) / smallCur.cols;
     const double scaleY = static_cast<double>(result.height()) / smallCur.rows;
 
     for (int y = 0; y < flow.rows; y += 2) {
         for (int x = 0; x < flow.cols; x += 2) {
             const cv::Point2f &fxy = flow.at<cv::Point2f>(y, x);
             double mag = std::sqrt(fxy.x * fxy.x + fxy.y * fxy.y);
-            if (mag < 0.3) continue;
+            if (mag < 0.3)
+                continue;
 
             double normMag = std::min(mag / 5.0, 1.0);
             int r = static_cast<int>(normMag * 255);
@@ -238,12 +231,10 @@ QImage OpenCVProcessor::applyMotionVectorsOverlay(const QImage &drawTarget,
 // ─────────────────────────────────────────────────────────────────────────────
 // Face detection
 // ─────────────────────────────────────────────────────────────────────────────
-QImage OpenCVProcessor::applyFaceDetection(const QImage &drawTarget,
-                                            const QImage &cleanCurrent)
+QImage OpenCVProcessor::applyFaceDetection(const QImage &drawTarget, const QImage &cleanCurrent)
 {
     if (!m_faceCascadeLoaded) {
-        QString path = QCoreApplication::applicationDirPath()
-                       + QStringLiteral("/opencv/haarcascade_frontalface_default.xml");
+        QString path = QCoreApplication::applicationDirPath() + QStringLiteral("/opencv/haarcascade_frontalface_default.xml");
         m_faceCascadeLoaded = m_faceCascade.load(path.toStdString());
         if (!m_faceCascadeLoaded)
             return drawTarget;
@@ -270,19 +261,16 @@ QImage OpenCVProcessor::applyFaceDetection(const QImage &drawTarget,
 // ─────────────────────────────────────────────────────────────────────────────
 // Motion level (grid-based, EMA smoothed, spike-rejected)
 // ─────────────────────────────────────────────────────────────────────────────
-double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent,
-                                            const QImage &cleanPrevious,
-                                            int sensitivity)
+double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent, const QImage &cleanPrevious, int sensitivity)
 {
-    if (cleanPrevious.isNull()) return 0.0;
+    if (cleanPrevious.isNull())
+        return 0.0;
 
     cv::Mat cur = qImageToMat(cleanCurrent);
     cv::Mat prev;
     {
         QImage tmp = cleanPrevious.convertToFormat(QImage::Format_RGB888);
-        cv::Mat raw(tmp.height(), tmp.width(), CV_8UC3,
-                    const_cast<uchar *>(tmp.constBits()),
-                    static_cast<size_t>(tmp.bytesPerLine()));
+        cv::Mat raw(tmp.height(), tmp.width(), CV_8UC3, const_cast<uchar *>(tmp.constBits()), static_cast<size_t>(tmp.bytesPerLine()));
         cv::cvtColor(raw, prev, cv::COLOR_RGB2BGR);
     }
 
@@ -292,7 +280,8 @@ double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent,
 
     int cellW = grayCur.cols / kGridCols;
     int cellH = grayCur.rows / kGridRows;
-    if (cellW < 1 || cellH < 1) return 0.0;
+    if (cellW < 1 || cellH < 1)
+        return 0.0;
 
     double maxCell = 0.0, sumCell = 0.0;
     constexpr double ema = 0.55;
@@ -302,12 +291,11 @@ double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent,
             cv::Rect roi(col * cellW, row * cellH, cellW, cellH);
             cv::Mat diff;
             cv::absdiff(grayCur(roi), grayPrev(roi), diff);
-            double raw = cv::mean(diff)[0] / 255.0;             // 0 … 1
+            double raw = cv::mean(diff)[0] / 255.0; // 0 … 1
 
             // Spike rejection via median of recent frames
             if (!m_medianHistory.empty()) {
-                std::vector<double> sorted(m_medianHistory.begin(),
-                                           m_medianHistory.end());
+                std::vector<double> sorted(m_medianHistory.begin(), m_medianHistory.end());
                 std::sort(sorted.begin(), sorted.end());
                 double median = sorted[sorted.size() / 2];
                 if (raw > 3.0 * median && median > 0.001)
@@ -318,7 +306,7 @@ double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent,
             m_cellLevels[idx] = ema * m_cellLevels[idx] + (1.0 - ema) * raw;
 
             double lv = m_cellLevels[idx] * (sensitivity / 25.0);
-            lv = std::sqrt(std::min(lv, 1.0));   // non-linear boost
+            lv = std::sqrt(std::min(lv, 1.0)); // non-linear boost
             maxCell = std::max(maxCell, lv);
             sumCell += lv;
         }
@@ -336,34 +324,36 @@ double OpenCVProcessor::computeMotionLevel(const QImage &cleanCurrent,
 // ─────────────────────────────────────────────────────────────────────────────
 // Grid motion overlay (coloured rectangles per cell)
 // ─────────────────────────────────────────────────────────────────────────────
-QImage OpenCVProcessor::applyGridMotionOverlay(const QImage &drawTarget,
-                                                const QImage &cleanCurrent,
-                                                const QImage &cleanPrevious,
-                                                int sensitivity)
+QImage OpenCVProcessor::applyGridMotionOverlay(const QImage &drawTarget, const QImage &cleanCurrent, const QImage &cleanPrevious, int sensitivity)
 {
-    if (cleanPrevious.isNull()) return drawTarget;
+    if (cleanPrevious.isNull())
+        return drawTarget;
 
     // Recompute cell levels (lightweight – reuses m_cellLevels updated in
     // computeMotionLevel which was just called)
     QImage result = drawTarget.copy();
     QPainter p(&result);
 
-    int cellW = result.width()  / kGridCols;
+    int cellW = result.width() / kGridCols;
     int cellH = result.height() / kGridRows;
 
     for (int row = 0; row < kGridRows; ++row) {
         for (int col = 0; col < kGridCols; ++col) {
             int idx = row * kGridCols + col;
             double lv = m_cellLevels[idx] * (sensitivity / 25.0);
-            lv = std::sqrt(std::min(lv, 1.0));   // non-linear boost
+            lv = std::sqrt(std::min(lv, 1.0)); // non-linear boost
 
             QColor c;
-            if (lv < 0.4)      c = QColor(0, 255, 0);     // green
-            else if (lv < 0.7) c = QColor(255, 255, 0);   // yellow
-            else               c = QColor(255, 0, 0);     // red
+            if (lv < 0.4)
+                c = QColor(0, 255, 0); // green
+            else if (lv < 0.7)
+                c = QColor(255, 255, 0); // yellow
+            else
+                c = QColor(255, 0, 0); // red
 
             int alpha = static_cast<int>(lv * 180);
-            if (alpha < 8) alpha = 0;   // avoid barely-visible noise
+            if (alpha < 8)
+                alpha = 0; // avoid barely-visible noise
             c.setAlpha(alpha);
             p.fillRect(col * cellW, row * cellH, cellW, cellH, c);
 
@@ -379,8 +369,7 @@ QImage OpenCVProcessor::applyGridMotionOverlay(const QImage &drawTarget,
 // ─────────────────────────────────────────────────────────────────────────────
 // Motion graph overlay (stacked bar chart, sliding window)
 // ─────────────────────────────────────────────────────────────────────────────
-QImage OpenCVProcessor::applyMotionGraphOverlay(const QImage &drawTarget,
-                                                 double motionLevel)
+QImage OpenCVProcessor::applyMotionGraphOverlay(const QImage &drawTarget, double motionLevel)
 {
     m_graphHistory.push_back(motionLevel);
     if (static_cast<int>(m_graphHistory.size()) > kGraphHistoryLen)
@@ -403,17 +392,18 @@ QImage OpenCVProcessor::applyMotionGraphOverlay(const QImage &drawTarget,
     const int gW = 320, gH = 120, margin = 10;
     int gX = margin;
     int gY = result.height() - gH - margin;
-    if (gY < 0) gY = 0;
+    if (gY < 0)
+        gY = 0;
 
     // Semi-transparent background
     p.fillRect(gX, gY, gW, gH, QColor(0, 0, 0, 160));
 
     // Row colours
     static const QColor rowColors[4] = {
-        QColor(66, 133, 244),    // blue   (top row)
-        QColor(0,  188, 212),    // teal
-        QColor(255, 193, 7),     // amber
-        QColor(244, 67, 54),     // red    (bottom row)
+        QColor(66, 133, 244), // blue   (top row)
+        QColor(0, 188, 212), // teal
+        QColor(255, 193, 7), // amber
+        QColor(244, 67, 54), // red    (bottom row)
     };
 
     int n = static_cast<int>(m_graphHistory.size());
@@ -428,7 +418,8 @@ QImage OpenCVProcessor::applyMotionGraphOverlay(const QImage &drawTarget,
             if (i < static_cast<int>(m_cellHistory[row].size()))
                 val = m_cellHistory[row][static_cast<size_t>(i)];
             double h = val * gH;
-            if (h < 1) continue;
+            if (h < 1)
+                continue;
 
             p.fillRect(QRectF(x, yBottom - h, barW + 0.5, h), rowColors[row]);
             yBottom -= h;
@@ -438,16 +429,14 @@ QImage OpenCVProcessor::applyMotionGraphOverlay(const QImage &drawTarget,
     // Percentage readout
     p.setPen(Qt::white);
     p.setFont(QFont(QStringLiteral("Monospace"), 9));
-    QString pct = QStringLiteral("Motion: %1 %").arg(
-        static_cast<int>(motionLevel * 100));
+    QString pct = QStringLiteral("Motion: %1 %").arg(static_cast<int>(motionLevel * 100));
     p.drawText(gX + 4, gY + 14, pct);
 
     // Legend
     int lx = gX + gW - 90;
     for (int row = 0; row < kGridRows; ++row) {
         p.fillRect(lx, gY + 4 + row * 14, 10, 10, rowColors[row]);
-        p.drawText(lx + 14, gY + 13 + row * 14,
-                   QStringLiteral("Row %1").arg(row + 1));
+        p.drawText(lx + 14, gY + 13 + row * 14, QStringLiteral("Row %1").arg(row + 1));
     }
 
     p.end();

@@ -1,8 +1,8 @@
 #pragma once
 
-#include <QObject>
 #include <QImage>
 #include <QMutex>
+#include <QObject>
 #include <QQueue>
 #include <QWaitCondition>
 #include <atomic>
@@ -19,7 +19,8 @@ extern "C" {
 
 /// Runs on its own QThread.  Receives QImages from VideoWorker via a lock-free
 /// queue and encodes / muxes them to disk without blocking the video pipeline.
-class RecordingWorker : public QObject {
+class RecordingWorker : public QObject
+{
     Q_OBJECT
 
 public:
@@ -27,7 +28,10 @@ public:
     ~RecordingWorker() override;
 
     /// Ask the encoding loop to exit ASAP (checked between frames).
-    void requestInterrupt() { m_interrupt.store(true, std::memory_order_relaxed); }
+    void requestInterrupt()
+    {
+        m_interrupt.store(true, std::memory_order_relaxed);
+    }
 
 public slots:
     /// Append an image to the encode queue (called cross-thread from VideoWorker).
@@ -56,26 +60,26 @@ private:
 #endif
 
     // ── queue ────────────────────────────────────────────────────────
-    static constexpr int kMaxQueueSize = 60;   // cap memory (~60 frames)
+    static constexpr int kMaxQueueSize = 60; // cap memory (~60 frames)
 
-    QMutex          m_queueMutex;
-    QQueue<QImage>  m_queue;
+    QMutex m_queueMutex;
+    QQueue<QImage> m_queue;
 
     // ── recording state ─────────────────────────────────────────────
     std::atomic<bool> m_interrupt{false};
-    bool    m_recording      = false;
-    bool    m_recOpen        = false;
+    bool m_recording = false;
+    bool m_recOpen = false;
     QString m_recPath;
     QString m_recCodec;
-    double  m_recFps         = 25.0;
-    int64_t m_recFrameIndex  = 0;
-    int     m_flushCounter   = 0;
+    double m_recFps = 25.0;
+    int64_t m_recFrameIndex = 0;
+    int m_flushCounter = 0;
 
 #ifdef HAVE_FFMPEG
-    AVFormatContext *m_fmtCtx   = nullptr;
-    AVCodecContext  *m_codecCtx = nullptr;
-    AVStream        *m_stream   = nullptr;
-    AVFrame         *m_avFrame  = nullptr;
-    SwsContext      *m_swsCtx   = nullptr;
+    AVFormatContext *m_fmtCtx = nullptr;
+    AVCodecContext *m_codecCtx = nullptr;
+    AVStream *m_stream = nullptr;
+    AVFrame *m_avFrame = nullptr;
+    SwsContext *m_swsCtx = nullptr;
 #endif
 };
