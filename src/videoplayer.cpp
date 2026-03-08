@@ -143,11 +143,10 @@ void VideoPlayer::stop()
 
 void VideoPlayer::setPaused(bool paused)
 {
-    if (paused)
-        m_player->pause();
-    else
-        m_player->play();
-
+    // Do NOT pause/resume QMediaPlayer — for live RTSP streams that would buffer
+    // frames and resume playback from the pause point instead of the current live
+    // position. The VideoWorker already handles visual pausing by freezing the
+    // last rendered frame while continuing to drain (and discard) incoming frames.
     emit pauseStateChanged(paused);
 
     StreamStateManager::instance().modifyState(m_streamId, [paused](StreamState &s) {
