@@ -2,6 +2,7 @@
 
 #include <QDebug>
 #include <QTimer>
+#include <iostream>
 #include <string>
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,38 +144,37 @@ bool RecordingWorker::openRecorder(int w, int h)
     if (ret < 0 || !m_fmtCtx)
         return false;
 
-    // ── Codec selection: try HW encoders first, fall back to software ──
+    // ── Codec selection: always prefer HW (NVENC → VAAPI → QSV) over SW ──
     const AVCodec *codec = nullptr;
 
     // Determine whether the user picked h264 or hevc family
     QString lower = m_recCodec.toLower();
     bool isHevc = lower.contains(QStringLiteral("265")) || lower.contains(QStringLiteral("hevc"));
 
-    // Try the user-requested codec first
-    codec = avcodec_find_encoder_by_name(m_recCodec.toUtf8().constData());
+    // Build candidate list. Generic SW names (libx264/libx265) are placed last so
+    // HW encoders are always preferred. If the user explicitly named a specific
+    // encoder (e.g. "h264_nvenc" or "hevc_vaapi"), try it first.
+    QList<QByteArray> candidateNames;
+    bool isGenericSw = (m_recCodec == QLatin1String("libx264") || m_recCodec == QLatin1String("libx265"));
+    if (!isGenericSw)
+        candidateNames.append(m_recCodec.toUtf8());
+    if (isHevc) {
+        candidateNames.append("hevc_nvenc");
+        candidateNames.append("hevc_vaapi");
+        candidateNames.append("hevc_qsv");
+        candidateNames.append("libx265");
+    } else {
+        candidateNames.append("h264_nvenc");
+        candidateNames.append("h264_vaapi");
+        candidateNames.append("h264_qsv");
+        candidateNames.append("libx264");
+    }
 
-    // If that didn't work, cascade through HW → SW encoders
-    if (!codec) {
-        const char *candidates[] = {nullptr, nullptr, nullptr, nullptr, nullptr};
-        if (isHevc) {
-            candidates[0] = "hevc_nvenc";
-            candidates[1] = "hevc_vaapi";
-            candidates[2] = "hevc_qsv";
-            candidates[3] = "libx265";
-        } else {
-            candidates[0] = "h264_nvenc";
-            candidates[1] = "h264_vaapi";
-            candidates[2] = "h264_qsv";
-            candidates[3] = "libx264";
-        }
-        for (auto *name : candidates) {
-            if (!name)
-                break;
-            codec = avcodec_find_encoder_by_name(name);
-            if (codec) {
-                qDebug() << "[RecordingWorker] Selected encoder:" << name;
-                break;
-            }
+    for (const QByteArray &name : candidateNames) {
+        codec = avcodec_find_encoder_by_name(name.constData());
+        if (codec) {
+            qDebug() << "[RecordingWorker] Selected encoder:" << name;
+            break;
         }
     }
 
@@ -207,6 +207,7 @@ bool RecordingWorker::openRecorder(int w, int h)
     bool isQsv = codecName.find("qsv") != std::string::npos;
 
     if (isNvenc) {
+        std::cout << "[RecordingWorker] Configuring NVENC encoder for low-latency recording" << std::endl;
         // NVENC: use constant-quality VBR, low-latency preset
         av_opt_set(m_codecCtx->priv_data, "preset", "p4", 0); // balanced
         av_opt_set(m_codecCtx->priv_data, "tune", "ll", 0); // low-latency
@@ -215,6 +216,7 @@ bool RecordingWorker::openRecorder(int w, int h)
         m_codecCtx->bit_rate = 0; // let CQ drive quality
         m_codecCtx->gop_size = static_cast<int>(m_recFps); // keyframe every ~1 sec
     } else if (isVaapi) {
+        std::cout << "[RecordingWorker] Configuring VAAPI encoder for low-latency recording" << std::endl;
         m_codecCtx->bit_rate = 6'000'000;
         m_codecCtx->gop_size = static_cast<int>(m_recFps);
     } else if (isQsv) {

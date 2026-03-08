@@ -16,11 +16,16 @@
 
 // ─────────────────────────────────────────────────────────────────────────────
 const QList<RecordDialog::Preset> RecordDialog::s_presets = {
-    {QStringLiteral("MP4 – H.264 (libx264)"), QStringLiteral("mp4"), QStringLiteral("libx264")},
-    {QStringLiteral("MP4 – H.265/HEVC (libx265)"), QStringLiteral("mp4"), QStringLiteral("libx265")},
-    {QStringLiteral("MKV – H.264 (libx264)"), QStringLiteral("mkv"), QStringLiteral("libx264")},
-    {QStringLiteral("MKV – H.265/HEVC (libx265)"), QStringLiteral("mkv"), QStringLiteral("libx265")},
-    {QStringLiteral("AVI – H.264 (libx264)"), QStringLiteral("avi"), QStringLiteral("libx264")},
+    {QStringLiteral("MP4 – H.264 (NVENC)"), QStringLiteral("mp4"), QStringLiteral("h264_nvenc")},
+    {QStringLiteral("MP4 – H.265/HEVC (NVENC)"), QStringLiteral("mp4"), QStringLiteral("hevc_nvenc")},
+    {QStringLiteral("MP4 – H.264 (auto)"), QStringLiteral("mp4"), QStringLiteral("libx264")},
+    {QStringLiteral("MP4 – H.265/HEVC (auto)"), QStringLiteral("mp4"), QStringLiteral("libx265")},
+    {QStringLiteral("MKV – H.264 (NVENC)"), QStringLiteral("mkv"), QStringLiteral("h264_nvenc")},
+    {QStringLiteral("MKV – H.265/HEVC (NVENC)"), QStringLiteral("mkv"), QStringLiteral("hevc_nvenc")},
+    {QStringLiteral("MKV – H.264 (auto)"), QStringLiteral("mkv"), QStringLiteral("libx264")},
+    {QStringLiteral("MKV – H.265/HEVC (auto)"), QStringLiteral("mkv"), QStringLiteral("libx265")},
+    {QStringLiteral("AVI – H.264 (NVENC)"), QStringLiteral("avi"), QStringLiteral("h264_nvenc")},
+    {QStringLiteral("AVI – H.264 (auto)"), QStringLiteral("avi"), QStringLiteral("libx264")},
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
