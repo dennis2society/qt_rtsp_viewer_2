@@ -1,6 +1,7 @@
 # Qt RTSP Viewer v2.0
 
 This is a Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, **real-time image processing**, **motion detection**, and **(automated) recording**.
+![Screenshot](qt_rtsp_viewer_screenshot_blurred.jpg)
 
 ## Disclaimer
 **This project is mostly AI generated** by throwing some more or less complex prompts at Github Copilot. Making this took about 6 hours with a few very long and specific prompts for Claude Opus 4.6 to generate project structure and most of the implementation, and a long series of shorter prompts for Claude Haiku/Sonnet 4.5/4.6 to get some quirks right.
