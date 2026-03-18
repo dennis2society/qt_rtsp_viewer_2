@@ -12,7 +12,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 # ── Qt6 ──────────────────────────────────────────────────────────────────────
 find_package(Qt6 REQUIRED COMPONENTS
-    Core Gui Widgets Multimedia MultimediaWidgets
+    Core Gui Widgets Multimedia MultimediaWidgets Network
 )
 
 # ── OpenCV ───────────────────────────────────────────────────────────────────
@@ -36,6 +36,7 @@ set(SOURCES
     src/effectssidebar.cpp
     src/opencvprocessor.cpp
     src/recorddialog.cpp
+    src/onvifclient.cpp
     res/resources.qrc
 )
 
@@ -50,6 +51,7 @@ set(HEADERS
     src/effectssidebar.h
     src/opencvprocessor.h
     src/recorddialog.h
+    src/onvifclient.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})
@@ -60,6 +62,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Widgets
     Qt6::Multimedia
     Qt6::MultimediaWidgets
+    Qt6::Network
     ${OpenCV_LIBS}
 )
 

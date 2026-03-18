@@ -115,6 +115,9 @@ void VideoPlayer::stopWorker()
 // ─────────────────────────────────────────────────────────────────────────────
 void VideoPlayer::play(const QString &url)
 {
+    if (m_worker)
+        QMetaObject::invokeMethod(m_worker, "resetStream", Qt::BlockingQueuedConnection);
+
     m_player->setSource(QUrl(url));
     m_player->play();
 

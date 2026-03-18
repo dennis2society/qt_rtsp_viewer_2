@@ -14,6 +14,8 @@ class OpenCVProcessor
 public:
     OpenCVProcessor();
 
+    void reset(); // call when stream source changes
+
     // ── image adjustments ───────────────────────────────────────────
     QImage applyGaussBlur(const QImage &src, int amount);
     QImage applyBrightnessContrast(const QImage &src, int brightness, int contrast);

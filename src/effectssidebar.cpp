@@ -1,4 +1,5 @@
 #include "effectssidebar.h"
+#include "onvifclient.h"
 #include "streamstatemanager.h"
 
 #include <QCheckBox>
@@ -8,9 +9,11 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
+#include <QUrl>
 #include <QVBoxLayout>
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -172,6 +175,40 @@ void EffectsSidebar::setupUI()
     lay->addWidget(m_resetBtn);
 
     lay->addStretch(1);
+
+    // ── ONVIF Capabilities ──────────────────────────────────────────
+    lay->addWidget(hLine());
+
+    addLabel(QStringLiteral("ONVIF Capabilities"));
+
+    lay->addWidget(new QLabel(QStringLiteral("Host:")));
+    m_onvifHostEdit = new QLineEdit;
+    m_onvifHostEdit->setPlaceholderText(QStringLiteral("auto from RTSP URL"));
+    lay->addWidget(m_onvifHostEdit);
+
+    lay->addWidget(new QLabel(QStringLiteral("Port:")));
+    m_onvifPortSpin = new QSpinBox;
+    m_onvifPortSpin->setRange(1, 65535);
+    m_onvifPortSpin->setValue(80);
+    lay->addWidget(m_onvifPortSpin);
+
+    lay->addWidget(new QLabel(QStringLiteral("Username:")));
+    m_onvifUserEdit = new QLineEdit;
+    lay->addWidget(m_onvifUserEdit);
+
+    lay->addWidget(new QLabel(QStringLiteral("Password:")));
+    m_onvifPassEdit = new QLineEdit;
+    m_onvifPassEdit->setEchoMode(QLineEdit::Password);
+    lay->addWidget(m_onvifPassEdit);
+
+    m_onvifQueryBtn = new QPushButton(QStringLiteral("Query Capabilities"));
+    lay->addWidget(m_onvifQueryBtn);
+
+    m_onvifStatusLabel = new QLabel(QStringLiteral("Not queried"));
+    m_onvifStatusLabel->setWordWrap(true);
+    m_onvifStatusLabel->setStyleSheet(QStringLiteral("color:gray;"));
+    lay->addWidget(m_onvifStatusLabel);
+
     setLayout(lay);
     setMinimumWidth(200);
     setMaximumWidth(270);
@@ -274,6 +311,49 @@ void EffectsSidebar::connectSlots()
             m_autoRecStatusLabel->setVisible(false);
         }
     });
+
+    // ── ONVIF ───────────────────────────────────────────────────────
+    m_onvifClient = new OnvifClient(this);
+
+    connect(m_onvifQueryBtn, &QPushButton::clicked, this, [this]() {
+        QString host = m_onvifHostEdit->text().trimmed();
+        if (host.isEmpty() && m_boundStream >= 0) {
+            // Fall back to host parsed from the current RTSP URL
+            StreamStateManager::instance().readState(m_boundStream, [&](const StreamState &s) {
+                host = QUrl(s.rtspUrl).host();
+            });
+        }
+        if (host.isEmpty()) {
+            m_onvifStatusLabel->setText(QStringLiteral("No host — set an RTSP URL or enter a host."));
+            m_onvifStatusLabel->setStyleSheet(QStringLiteral("color:red;"));
+            return;
+        }
+        m_onvifQueryBtn->setEnabled(false);
+        m_onvifStatusLabel->setText(QStringLiteral("Querying…"));
+        m_onvifStatusLabel->setStyleSheet(QStringLiteral("color:gray;"));
+        m_onvifClient->fetchCapabilities(host, static_cast<quint16>(m_onvifPortSpin->value()), m_onvifUserEdit->text(), m_onvifPassEdit->text());
+    });
+
+    connect(m_onvifClient, &OnvifClient::capabilitiesReady, this, [this](const OnvifCapabilities &caps) {
+        m_onvifQueryBtn->setEnabled(true);
+        auto icon = [](bool ok) -> QString {
+            return ok ? QStringLiteral("✓") : QStringLiteral("✗");
+        };
+        QStringList lines;
+        lines << QStringLiteral("%1 Media").arg(icon(caps.hasMedia));
+        lines << QStringLiteral("%1 Events").arg(icon(caps.hasEvents));
+        lines << QStringLiteral("%1 Imaging").arg(icon(caps.hasImaging));
+        lines << QStringLiteral("%1 PTZ").arg(icon(caps.hasPTZ));
+        lines << QStringLiteral("%1 Analytics").arg(icon(caps.hasAnalytics));
+        m_onvifStatusLabel->setText(lines.join(QLatin1Char('\n')));
+        m_onvifStatusLabel->setStyleSheet(QString());
+    });
+
+    connect(m_onvifClient, &OnvifClient::queryFailed, this, [this](const QString &err) {
+        m_onvifQueryBtn->setEnabled(true);
+        m_onvifStatusLabel->setText(QStringLiteral("Error: ") + err);
+        m_onvifStatusLabel->setStyleSheet(QStringLiteral("color:red;"));
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -336,6 +416,19 @@ void EffectsSidebar::bindToStream(int streamId)
         m_autoRecStatusLabel->setStyleSheet(QString());
         m_autoRecStatusLabel->setVisible(false);
     }
+
+    // ── ONVIF section: pre-fill credentials from the RTSP URL ───────
+    {
+        QUrl rtspUrl(st.rtspUrl);
+        m_onvifHostEdit->setText(rtspUrl.host());
+        if (!rtspUrl.userName().isEmpty())
+            m_onvifUserEdit->setText(rtspUrl.userName());
+        if (!rtspUrl.password().isEmpty())
+            m_onvifPassEdit->setText(rtspUrl.password());
+    }
+    m_onvifQueryBtn->setEnabled(true);
+    m_onvifStatusLabel->setText(QStringLiteral("Not queried"));
+    m_onvifStatusLabel->setStyleSheet(QStringLiteral("color:gray;"));
 
     blockAllSignals(false);
 }

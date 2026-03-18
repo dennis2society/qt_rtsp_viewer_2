@@ -19,6 +19,15 @@ OpenCVProcessor::OpenCVProcessor()
         dq.resize(kGraphHistoryLen, 0.0);
 }
 
+void OpenCVProcessor::reset()
+{
+    m_globalDiffEma = -1.0;
+    std::fill(m_cellLevels.begin(), m_cellLevels.end(), 0.0);
+    for (auto &dq : m_cellHistory)
+        std::fill(dq.begin(), dq.end(), 0.0);
+    m_graphHistory.clear();
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
@@ -125,6 +134,9 @@ QImage OpenCVProcessor::applyColorTemperature(const QImage &src, int temperature
 // ─────────────────────────────────────────────────────────────────────────────
 bool OpenCVProcessor::isSpikeFrame(const cv::Mat &grayCur, const cv::Mat &grayPrev)
 {
+    if (grayCur.size() != grayPrev.size())
+        return true; // mismatched sizes (e.g. stream resolution changed) – treat as spike
+
     cv::Mat diff;
     cv::absdiff(grayCur, grayPrev, diff);
     double globalDiff = cv::mean(diff)[0] / 255.0;

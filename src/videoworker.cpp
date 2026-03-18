@@ -45,6 +45,12 @@ void VideoWorker::setRecording(bool on)
 {
     m_recording = on;
 }
+void VideoWorker::resetStream()
+{
+    m_cleanPrevious = QImage{};
+    m_frozenFrame = QImage{};
+    m_processor->reset();
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Frame submission (runs on multimedia thread — must be fast)

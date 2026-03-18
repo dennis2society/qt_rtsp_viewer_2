@@ -33,6 +33,7 @@ public slots:
 
     void setPaused(bool p);
     void setStreamActive(bool active);
+    void resetStream(); // clears inter-frame state when URL changes
 
     // ── recording state (kept for auto-record logic) ────────────────
     void setRecording(bool on);
