@@ -9,7 +9,6 @@ class QLabel;
 class QLineEdit;
 class QPushButton;
 class QSpinBox;
-class OnvifClient;
 
 /// Shared sidebar — always visible, rebinds to the active stream tab.
 class EffectsSidebar : public QWidget
@@ -79,12 +78,6 @@ private:
     // Reset
     QPushButton *m_resetBtn = nullptr;
 
-    // ONVIF capabilities
-    QLineEdit *m_onvifHostEdit = nullptr;
-    QSpinBox *m_onvifPortSpin = nullptr;
-    QLineEdit *m_onvifUserEdit = nullptr;
-    QLineEdit *m_onvifPassEdit = nullptr;
-    QPushButton *m_onvifQueryBtn = nullptr;
-    QLabel *m_onvifStatusLabel = nullptr;
-    OnvifClient *m_onvifClient = nullptr;
+    // ONVIF
+    QPushButton *m_onvifSettingsBtn = nullptr;
 };

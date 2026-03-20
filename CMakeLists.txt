@@ -37,6 +37,7 @@ set(SOURCES
     src/opencvprocessor.cpp
     src/recorddialog.cpp
     src/onvifclient.cpp
+    src/onvifsettingsdialog.cpp
     res/resources.qrc
 )
 
@@ -52,6 +53,7 @@ set(HEADERS
     src/opencvprocessor.h
     src/recorddialog.h
     src/onvifclient.h
+    src/onvifsettingsdialog.h
 )
 
 add_executable(${PROJECT_NAME} ${SOURCES} ${HEADERS})

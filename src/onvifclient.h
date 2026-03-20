@@ -2,6 +2,9 @@
 
 #include <QObject>
 #include <QString>
+#include <QStringList>
+#include <functional>
+#include <optional>
 
 class QNetworkAccessManager;
 
@@ -26,6 +29,38 @@ struct OnvifCapabilities {
     QString ptzXAddr;
 };
 
+/// Current imaging settings reported by the camera.
+struct OnvifImagingSettings {
+    bool valid = false;
+    std::optional<double> brightness;
+    std::optional<double> colorSaturation;
+    std::optional<double> contrast;
+    std::optional<double> sharpness;
+    QString irCutFilter; // "ON", "OFF", "AUTO"
+    bool backlightCompEnabled = false;
+    std::optional<double> backlightCompLevel;
+    bool wdrEnabled = false;
+    std::optional<double> wdrLevel;
+};
+
+/// Allowable ranges for imaging settings.
+struct OnvifImagingOptions {
+    bool valid = false;
+    struct Range {
+        double min = 0;
+        double max = 100;
+    };
+    std::optional<Range> brightness;
+    std::optional<Range> colorSaturation;
+    std::optional<Range> contrast;
+    std::optional<Range> sharpness;
+    bool hasIrCutFilter = false;
+    bool hasBacklightComp = false;
+    std::optional<Range> backlightLevel;
+    bool hasWDR = false;
+    std::optional<Range> wdrLevel;
+};
+
 /// Queries an ONVIF device for its GetCapabilities response via SOAP 1.2
 /// over HTTP.  All I/O is asynchronous; results arrive via signals.
 class OnvifClient : public QObject
@@ -35,21 +70,31 @@ class OnvifClient : public QObject
 public:
     explicit OnvifClient(QObject *parent = nullptr);
 
-    /// Start an async GetCapabilities query.
-    /// Emits capabilitiesReady() on success or queryFailed() on error.
     void fetchCapabilities(const QString &host, quint16 port, const QString &username, const QString &password);
+    void fetchVideoSources(const QString &mediaXAddr, const QString &user, const QString &pass);
+    void fetchImagingSettings(const QString &imagingXAddr, const QString &token, const QString &user, const QString &pass);
+    void fetchImagingOptions(const QString &imagingXAddr, const QString &token, const QString &user, const QString &pass);
+    void
+    applyImagingSettings(const QString &imagingXAddr, const QString &token, const OnvifImagingSettings &settings, const QString &user, const QString &pass);
 
 signals:
     void capabilitiesReady(const OnvifCapabilities &caps);
+    void videoSourcesReady(const QStringList &tokens);
+    void imagingSettingsReady(const OnvifImagingSettings &settings);
+    void imagingOptionsReady(const OnvifImagingOptions &options);
+    void imagingSettingsApplied();
     void queryFailed(const QString &errorMessage);
 
 private:
-    /// Build the SOAP 1.2 GetCapabilities request body.
-    /// Includes a WS-Security PasswordDigest header when username is non-empty.
-    QByteArray buildSoap(const QString &username, const QString &password) const;
+    QByteArray buildSecurityHeader(const QString &user, const QString &pass) const;
+    QByteArray wrapSoap(const QString &body, const QString &user, const QString &pass) const;
+    void postSoap(const QUrl &url, const QByteArray &soap, std::function<void(const QByteArray &)> onSuccess);
 
-    /// Parse a raw SOAP response body into an OnvifCapabilities struct.
-    static OnvifCapabilities parseResponse(const QByteArray &data);
+    static OnvifCapabilities parseCapabilities(const QByteArray &data);
+    static QStringList parseVideoSources(const QByteArray &data);
+    static OnvifImagingSettings parseImagingSettings(const QByteArray &data);
+    static OnvifImagingOptions parseImagingOptions(const QByteArray &data);
+    static QString parseSoapFault(const QByteArray &data);
 
     QNetworkAccessManager *m_nam;
 };
