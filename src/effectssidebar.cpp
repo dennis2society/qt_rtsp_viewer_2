@@ -57,6 +57,32 @@ void EffectsSidebar::setupUI()
         lay->addWidget(l);
     };
 
+    bool gpuAvailable = cv::ocl::haveOpenCL();
+
+    auto makeGpuBadge = [gpuAvailable]() -> QLabel * {
+        auto *badge = new QLabel;
+        if (gpuAvailable) {
+            badge->setText(QStringLiteral("GPU"));
+            badge->setStyleSheet(
+                QStringLiteral("color:#fff;background:#2e7d32;border-radius:3px;padding:0 4px;"
+                               "font-size:10px;font-weight:bold;"));
+        } else {
+            badge->setText(QStringLiteral("CPU"));
+            badge->setStyleSheet(
+                QStringLiteral("color:#555;background:#ddd;border-radius:3px;padding:0 4px;"
+                               "font-size:10px;"));
+        }
+        return badge;
+    };
+
+    auto addLabelWithBadge = [&](const QString &text) {
+        auto *row = new QHBoxLayout;
+        row->addWidget(new QLabel(text));
+        row->addStretch();
+        row->addWidget(makeGpuBadge());
+        lay->addLayout(row);
+    };
+
     // ── Image adjustments ───────────────────────────────────────────
     addLabel(QStringLiteral("Image Adjustments"));
 
@@ -65,7 +91,7 @@ void EffectsSidebar::setupUI()
         blurRow->addWidget(new QLabel(QStringLiteral("Blur")));
         blurRow->addStretch();
         m_blurGpuLabel = new QLabel;
-        if (cv::ocl::haveOpenCL()) {
+        if (gpuAvailable) {
             m_blurGpuLabel->setText(QStringLiteral("GPU (OpenCL)"));
             m_blurGpuLabel->setStyleSheet(
                 QStringLiteral("color:#fff;background:#2e7d32;border-radius:3px;padding:0 4px;"
@@ -85,22 +111,30 @@ void EffectsSidebar::setupUI()
     m_grayscaleCheck = new QCheckBox(QStringLiteral("Grayscale"));
     lay->addWidget(m_grayscaleCheck);
 
-    lay->addWidget(new QLabel(QStringLiteral("Brightness")));
+    addLabelWithBadge(QStringLiteral("Brightness"));
     m_brightnessSlider = makeSlider(-100, 100, 0);
     lay->addWidget(m_brightnessSlider);
 
-    lay->addWidget(new QLabel(QStringLiteral("Contrast")));
+    addLabelWithBadge(QStringLiteral("Contrast"));
     m_contrastSlider = makeSlider(-100, 100, 0);
     lay->addWidget(m_contrastSlider);
 
-    lay->addWidget(new QLabel(QStringLiteral("Colour Temperature")));
+    addLabelWithBadge(QStringLiteral("Colour Temperature"));
     m_colorTempSlider = makeSlider(-100, 100, 0);
     lay->addWidget(m_colorTempSlider);
 
     lay->addWidget(hLine());
 
     // ── Detection ───────────────────────────────────────────────────
-    addLabel(QStringLiteral("Detection / Overlays"));
+    {
+        auto *detRow = new QHBoxLayout;
+        auto *detLabel = new QLabel(QStringLiteral("Detection / Overlays"));
+        detLabel->setStyleSheet(QStringLiteral("font-weight:bold;"));
+        detRow->addWidget(detLabel);
+        detRow->addStretch();
+        detRow->addWidget(makeGpuBadge());
+        lay->addLayout(detRow);
+    }
 
     m_motionDetCheck = new QCheckBox(QStringLiteral("Motion Detection"));
     lay->addWidget(m_motionDetCheck);

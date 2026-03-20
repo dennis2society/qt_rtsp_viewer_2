@@ -17,33 +17,32 @@ public:
 
     void reset(); // call when stream source changes
 
-    // ── image adjustments ───────────────────────────────────────────
-    QImage applyGaussBlur(const QImage &src, int amount);
-    QImage applyBrightnessContrast(const QImage &src, int brightness, int contrast);
-    QImage applyColorTemperature(const QImage &src, int temperature);
+    // ── conversion ──────────────────────────────────────────────────
+    cv::Mat qImageToBGR(const QImage &img);
+    QImage bgrToQImage(const cv::Mat &bgr);
 
-    // ── detection overlays ──────────────────────────────────────────
-    QImage applyMotionDetectionOverlay(const QImage &drawTarget, const QImage &cleanCurrent, const QImage &cleanPrevious, int sensitivity);
+    // ── image adjustments (in-place on BGR cv::Mat) ─────────────────
+    void applyGaussBlur(cv::Mat &bgr, int amount);
+    void applyBrightnessContrast(cv::Mat &bgr, int brightness, int contrast);
+    void applyColorTemperature(cv::Mat &bgr, int temperature);
 
-    QImage applyMotionVectorsOverlay(const QImage &drawTarget, const QImage &cleanCurrent, const QImage &cleanPrevious);
+    // ── spike detection ─────────────────────────────────────────────
+    bool isSpikeFrame(const cv::Mat &grayCur, const cv::Mat &grayPrev);
+    double decayMotionLevels();
 
-    QImage applyFaceDetection(const QImage &drawTarget, const QImage &cleanCurrent);
+    // ── detection overlays (paint directly on QImage) ───────────────
+    void applyMotionDetectionOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, int sensitivity);
+    void applyMotionVectorsOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev);
+    void applyFaceDetection(QImage &image, const cv::Mat &bgrClean);
 
     // ── motion analysis ─────────────────────────────────────────────
-    double computeMotionLevel(const QImage &cleanCurrent, const QImage &cleanPrevious, int sensitivity);
-
-    QImage applyGridMotionOverlay(const QImage &drawTarget, const QImage &cleanCurrent, const QImage &cleanPrevious, int sensitivity);
-
-    QImage applyMotionGraphOverlay(const QImage &drawTarget, double motionLevel);
+    double computeMotionLevel(const cv::Mat &grayCur, const cv::Mat &grayPrev, int sensitivity);
+    void applyGridMotionOverlay(QImage &image, int sensitivity);
+    void applyMotionGraphOverlay(QImage &image, double motionLevel);
 
 private:
-    // helpers
-    cv::Mat qImageToMat(const QImage &img);
-    QImage matToQImage(const cv::Mat &mat, QImage::Format fmt);
-
     // reusable buffers
     cv::Mat m_srcMat, m_work1, m_work2, m_work3, m_rgbMat;
-    QImage m_resultImage;
 
     // face detection
     cv::CascadeClassifier m_faceCascade;
@@ -62,16 +61,10 @@ private:
     std::vector<std::deque<double>> m_cellHistory;
 
     // Codec-artifact (I-frame) spike rejection
-    // Tracks EMA of the whole-frame mean absolute diff so outlier frames
-    // (I-frames, decoder glitches) can be detected and suppressed.
-    double m_globalDiffEma = -1.0; // -1 means "not yet initialised"
-    static constexpr double kGlobalDiffEmaAlpha = 0.15; // slow-rising EMA
-    static constexpr double kSpikeMultiplier = 4.0; // frame is spike if diff > N × EMA
+    double m_globalDiffEma = -1.0;
+    static constexpr double kGlobalDiffEmaAlpha = 0.15;
+    static constexpr double kSpikeMultiplier = 4.0;
 
     // OpenCL availability (checked once at construction)
     bool m_haveOpenCL = false;
-
-    // Helper: returns true when the frame-to-frame diff looks like a codec
-    // artifact and updates m_globalDiffEma only for clean frames.
-    bool isSpikeFrame(const cv::Mat &grayCur, const cv::Mat &grayPrev);
 };

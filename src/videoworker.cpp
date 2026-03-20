@@ -9,6 +9,8 @@
 #include <QTimer>
 #include <QVideoFrame>
 
+#include <opencv2/imgproc.hpp>
+
 // ─────────────────────────────────────────────────────────────────────────────
 VideoWorker::VideoWorker(int streamId, QObject *parent)
     : QObject(parent)
@@ -49,7 +51,7 @@ void VideoWorker::setRecording(bool on)
 }
 void VideoWorker::resetStream()
 {
-    m_cleanPrevious = QImage{};
+    m_cleanPreviousGray = cv::Mat{};
     m_processor->reset();
 }
 
@@ -100,12 +102,12 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
         m_fpsTimer = QDateTime::currentDateTime();
     }
 
-    // Convert QVideoFrame → QImage
+    // Convert QVideoFrame → QImage → BGR cv::Mat (once)
     QVideoFrame f(frame);
     f.map(QVideoFrame::ReadOnly);
-    QImage image = f.toImage();
+    QImage rawImage = f.toImage();
     f.unmap();
-    if (image.isNull())
+    if (rawImage.isNull())
         return;
 
     // ── Read effect state (thread-safe snapshot) ────────────────────
@@ -114,63 +116,87 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
         st = s;
     });
 
-    // 1. Brightness / Contrast
+    cv::Mat bgr = m_processor->qImageToBGR(rawImage);
+
+    // 1. Brightness / Contrast (in-place)
     if (st.brightnessAmount != 0 || st.contrastAmount != 0)
-        image = m_processor->applyBrightnessContrast(image, st.brightnessAmount, st.contrastAmount);
+        m_processor->applyBrightnessContrast(bgr, st.brightnessAmount, st.contrastAmount);
 
-    // 2. Colour temperature
+    // 2. Colour temperature (in-place)
     if (st.colorTemperature != 0)
-        image = m_processor->applyColorTemperature(image, st.colorTemperature);
+        m_processor->applyColorTemperature(bgr, st.colorTemperature);
 
-    // 3. Grayscale
-    if (st.grayscaleEnabled)
-        image = image.convertToFormat(QImage::Format_Grayscale8).convertToFormat(QImage::Format_RGB888);
-
-    // 4. Blur
-    if (st.blurAmount > 0)
-        image = m_processor->applyGaussBlur(image, st.blurAmount);
-
-    // 5. Clean snapshot
-    QImage cleanImage = image.copy();
-
-    // 6. Motion detection overlay
-    if (st.motionDetectionEnabled)
-        image = m_processor->applyMotionDetectionOverlay(image, cleanImage, m_cleanPrevious, st.motionSensitivity);
-
-    // 7. Motion vectors overlay
-    if (st.motionVectorsEnabled)
-        image = m_processor->applyMotionVectorsOverlay(image, cleanImage, m_cleanPrevious);
-
-    // 8. Face detection overlay
-    if (st.faceDetectionEnabled)
-        image = m_processor->applyFaceDetection(image, cleanImage);
-
-    // 9. Motion level (for graph + auto-record)
-    double motionLevel = 0.0;
-    if (st.motionGraphEnabled || st.autoRecordEnabled) {
-        motionLevel = m_processor->computeMotionLevel(cleanImage, m_cleanPrevious, st.motionGraphSensitivity);
+    // 3. Grayscale (in-place)
+    if (st.grayscaleEnabled) {
+        cv::Mat gray;
+        cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
+        cv::cvtColor(gray, bgr, cv::COLOR_GRAY2BGR);
     }
 
-    // 10. Grid motion overlay
+    // 4. Blur (in-place)
+    if (st.blurAmount > 0)
+        m_processor->applyGaussBlur(bgr, st.blurAmount);
+
+    // 5. Prepare for detection — compute gray/BGR snapshots only if needed
+    bool needsMotion = st.motionDetectionEnabled || st.motionVectorsEnabled || st.motionGraphEnabled || st.autoRecordEnabled;
+    bool needsFace = st.faceDetectionEnabled;
+
+    cv::Mat cleanBGR, cleanGray;
+    if (needsFace)
+        cleanBGR = bgr.clone();
+    if (needsMotion)
+        cv::cvtColor(bgr, cleanGray, cv::COLOR_BGR2GRAY);
+
+    // 6. Convert BGR → QImage (once)
+    QImage image = m_processor->bgrToQImage(bgr);
+
+    // 7. Spike detection (once for all motion functions)
+    bool isSpike = false;
+    double motionLevel = 0.0;
+    if (needsMotion && !m_cleanPreviousGray.empty())
+        isSpike = m_processor->isSpikeFrame(cleanGray, m_cleanPreviousGray);
+
+    if (isSpike) {
+        motionLevel = m_processor->decayMotionLevels();
+    } else {
+        // 8. Motion detection overlay
+        if (st.motionDetectionEnabled && !m_cleanPreviousGray.empty())
+            m_processor->applyMotionDetectionOverlay(image, cleanGray, m_cleanPreviousGray, st.motionSensitivity);
+
+        // 9. Motion vectors overlay
+        if (st.motionVectorsEnabled && !m_cleanPreviousGray.empty())
+            m_processor->applyMotionVectorsOverlay(image, cleanGray, m_cleanPreviousGray);
+
+        // 10. Motion level (for graph + auto-record)
+        if ((st.motionGraphEnabled || st.autoRecordEnabled) && !m_cleanPreviousGray.empty())
+            motionLevel = m_processor->computeMotionLevel(cleanGray, m_cleanPreviousGray, st.motionGraphSensitivity);
+    }
+
+    // 11. Face detection (independent of motion spike)
+    if (needsFace)
+        m_processor->applyFaceDetection(image, cleanBGR);
+
+    // 12. Grid motion overlay
     if (st.motionGraphEnabled)
-        image = m_processor->applyGridMotionOverlay(image, cleanImage, m_cleanPrevious, st.motionGraphSensitivity);
+        m_processor->applyGridMotionOverlay(image, st.motionGraphSensitivity);
 
-    // 11. Motion graph overlay
+    // 13. Motion graph overlay
     if (st.motionGraphEnabled)
-        image = m_processor->applyMotionGraphOverlay(image, motionLevel);
+        m_processor->applyMotionGraphOverlay(image, motionLevel);
 
-    // 12. Save clean frame for next iteration
-    m_cleanPrevious = cleanImage;
+    // 14. Save clean gray for next iteration
+    if (needsMotion)
+        m_cleanPreviousGray = cleanGray;
 
-    // 13. FPS / resolution / datetime overlay
+    // 15. FPS / resolution / datetime overlay
     if (st.overlayEnabled)
         paintFpsOverlay(image);
 
-    // 14. Send frame to recording thread (non-blocking)
+    // 16. Send frame to recording thread (non-blocking)
     if (m_recording && m_streamActive)
         emit frameForRecording(image);
 
-    // 15. Auto-record logic
+    // 17. Auto-record logic
     if (st.autoRecordEnabled)
         handleAutoRecord(motionLevel);
 

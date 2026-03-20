@@ -7,6 +7,8 @@
 #include <QVideoFrame>
 #include <atomic>
 
+#include <opencv2/core.hpp>
+
 class OpenCVProcessor;
 class QTimer;
 
@@ -72,7 +74,7 @@ private:
     QDateTime m_fpsTimer;
 
     // Clean-frame bookkeeping (for detection algorithms)
-    QImage m_cleanPrevious;
+    cv::Mat m_cleanPreviousGray;
 
     // Timer that drives frame processing — started/stopped with stream activity
     QTimer *m_processTimer = nullptr;
