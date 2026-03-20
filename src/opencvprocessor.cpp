@@ -17,6 +17,10 @@ OpenCVProcessor::OpenCVProcessor()
     m_cellHistory.resize(kGridRows);
     for (auto &dq : m_cellHistory)
         dq.resize(kGraphHistoryLen, 0.0);
+
+    m_haveOpenCL = cv::ocl::haveOpenCL();
+    if (m_haveOpenCL)
+        cv::ocl::setUseOpenCL(true);
 }
 
 void OpenCVProcessor::reset()
@@ -67,7 +71,16 @@ QImage OpenCVProcessor::applyGaussBlur(const QImage &src, int amount)
     cv::Mat mat = qImageToMat(src);
     int ks = amount * 2 + 1;
     double sigma = amount * 0.5;
-    cv::GaussianBlur(mat, m_work1, cv::Size(ks, ks), sigma);
+
+    if (m_haveOpenCL) {
+        cv::UMat uSrc, uDst;
+        mat.copyTo(uSrc);
+        cv::GaussianBlur(uSrc, uDst, cv::Size(ks, ks), sigma);
+        uDst.copyTo(m_work1);
+    } else {
+        cv::GaussianBlur(mat, m_work1, cv::Size(ks, ks), sigma);
+    }
+
     return matToQImage(m_work1, QImage::Format_RGB888);
 }
 

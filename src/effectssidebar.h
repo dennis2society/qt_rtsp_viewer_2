@@ -41,6 +41,7 @@ private:
     // ── controls ────────────────────────────────────────────────────
     // Image adjustments
     QSlider *m_blurSlider = nullptr;
+    QLabel *m_blurGpuLabel = nullptr;
     QCheckBox *m_grayscaleCheck = nullptr;
     QSlider *m_brightnessSlider = nullptr;
     QSlider *m_contrastSlider = nullptr;

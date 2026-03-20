@@ -16,6 +16,8 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
+#include <opencv2/core/ocl.hpp>
+
 // ─────────────────────────────────────────────────────────────────────────────
 EffectsSidebar::EffectsSidebar(QWidget *parent)
     : QWidget(parent)
@@ -58,7 +60,25 @@ void EffectsSidebar::setupUI()
     // ── Image adjustments ───────────────────────────────────────────
     addLabel(QStringLiteral("Image Adjustments"));
 
-    lay->addWidget(new QLabel(QStringLiteral("Blur")));
+    {
+        auto *blurRow = new QHBoxLayout;
+        blurRow->addWidget(new QLabel(QStringLiteral("Blur")));
+        blurRow->addStretch();
+        m_blurGpuLabel = new QLabel;
+        if (cv::ocl::haveOpenCL()) {
+            m_blurGpuLabel->setText(QStringLiteral("GPU (OpenCL)"));
+            m_blurGpuLabel->setStyleSheet(
+                QStringLiteral("color:#fff;background:#2e7d32;border-radius:3px;padding:0 4px;"
+                               "font-size:10px;font-weight:bold;"));
+        } else {
+            m_blurGpuLabel->setText(QStringLiteral("CPU"));
+            m_blurGpuLabel->setStyleSheet(
+                QStringLiteral("color:#555;background:#ddd;border-radius:3px;padding:0 4px;"
+                               "font-size:10px;"));
+        }
+        blurRow->addWidget(m_blurGpuLabel);
+        lay->addLayout(blurRow);
+    }
     m_blurSlider = makeSlider(0, 30, 0);
     lay->addWidget(m_blurSlider);
 

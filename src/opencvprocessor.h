@@ -5,6 +5,7 @@
 #include <deque>
 
 #include <opencv2/core.hpp>
+#include <opencv2/core/ocl.hpp>
 #include <opencv2/objdetect.hpp>
 
 /// Pure image-processing utility – no QObject, no threading awareness.
@@ -66,6 +67,9 @@ private:
     double m_globalDiffEma = -1.0; // -1 means "not yet initialised"
     static constexpr double kGlobalDiffEmaAlpha = 0.15; // slow-rising EMA
     static constexpr double kSpikeMultiplier = 4.0; // frame is spike if diff > N × EMA
+
+    // OpenCL availability (checked once at construction)
+    bool m_haveOpenCL = false;
 
     // Helper: returns true when the frame-to-frame diff looks like a codec
     // artifact and updates m_globalDiffEma only for clean frames.
