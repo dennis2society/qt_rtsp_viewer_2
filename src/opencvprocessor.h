@@ -21,10 +21,20 @@ public:
     cv::Mat qImageToBGR(const QImage &img);
     QImage bgrToQImage(const cv::Mat &bgr);
 
-    // ── image adjustments (in-place on BGR cv::Mat) ─────────────────
+    // ── image adjustments (in-place on BGR cv::Mat – CPU path) ─────
     void applyGaussBlur(cv::Mat &bgr, int amount);
     void applyBrightnessContrast(cv::Mat &bgr, int brightness, int contrast);
     void applyColorTemperature(cv::Mat &bgr, int temperature);
+
+    // ── image adjustments (in-place on BGR cv::UMat – GPU path) ──
+    void applyGaussBlur(cv::UMat &bgr, int amount);
+    void applyBrightnessContrast(cv::UMat &bgr, int brightness, int contrast);
+    void applyColorTemperature(cv::UMat &bgr, int temperature);
+
+    bool haveOpenCL() const
+    {
+        return m_haveOpenCL;
+    }
 
     // ── spike detection ─────────────────────────────────────────────
     bool isSpikeFrame(const cv::Mat &grayCur, const cv::Mat &grayPrev);

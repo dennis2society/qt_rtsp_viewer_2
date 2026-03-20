@@ -70,16 +70,19 @@ void OpenCVProcessor::applyGaussBlur(cv::Mat &bgr, int amount)
         return;
     int ks = amount * 2 + 1;
     double sigma = amount * 0.5;
+    cv::GaussianBlur(bgr, m_work1, cv::Size(ks, ks), sigma);
+    cv::swap(bgr, m_work1);
+}
 
-    if (m_haveOpenCL) {
-        cv::UMat uSrc, uDst;
-        bgr.copyTo(uSrc);
-        cv::GaussianBlur(uSrc, uDst, cv::Size(ks, ks), sigma);
-        uDst.copyTo(bgr);
-    } else {
-        cv::GaussianBlur(bgr, m_work1, cv::Size(ks, ks), sigma);
-        cv::swap(bgr, m_work1);
-    }
+void OpenCVProcessor::applyGaussBlur(cv::UMat &bgr, int amount)
+{
+    if (amount <= 0)
+        return;
+    int ks = amount * 2 + 1;
+    double sigma = amount * 0.5;
+    cv::UMat tmp;
+    cv::GaussianBlur(bgr, tmp, cv::Size(ks, ks), sigma);
+    cv::swap(bgr, tmp);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -90,27 +93,30 @@ void OpenCVProcessor::applyBrightnessContrast(cv::Mat &bgr, int brightness, int 
     if (brightness == 0 && contrast == 0)
         return;
 
-    double alpha = 1.0 + contrast / 100.0; // contrast scale
-    double beta = brightness; // brightness offset
+    double alpha = 1.0 + contrast / 100.0;
+    double beta = brightness;
 
-    if (m_haveOpenCL) {
-        cv::UMat u;
-        bgr.copyTo(u);
-        u.convertTo(u, -1, alpha, beta);
-        u.copyTo(bgr);
-    } else {
-        cv::Mat lut(1, 256, CV_8U);
-        uchar *p = lut.ptr();
-        for (int i = 0; i < 256; ++i)
-            p[i] = cv::saturate_cast<uchar>(alpha * i + beta);
+    cv::Mat lut(1, 256, CV_8U);
+    uchar *p = lut.ptr();
+    for (int i = 0; i < 256; ++i)
+        p[i] = cv::saturate_cast<uchar>(alpha * i + beta);
 
-        std::vector<cv::Mat> chs;
-        cv::split(bgr, chs);
-        for (auto &ch : chs)
-            cv::LUT(ch, lut, ch);
-        cv::merge(chs, m_work1);
-        cv::swap(bgr, m_work1);
-    }
+    std::vector<cv::Mat> chs;
+    cv::split(bgr, chs);
+    for (auto &ch : chs)
+        cv::LUT(ch, lut, ch);
+    cv::merge(chs, m_work1);
+    cv::swap(bgr, m_work1);
+}
+
+void OpenCVProcessor::applyBrightnessContrast(cv::UMat &bgr, int brightness, int contrast)
+{
+    if (brightness == 0 && contrast == 0)
+        return;
+
+    double alpha = 1.0 + contrast / 100.0;
+    double beta = brightness;
+    bgr.convertTo(bgr, -1, alpha, beta);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -121,31 +127,35 @@ void OpenCVProcessor::applyColorTemperature(cv::Mat &bgr, int temperature)
     if (temperature == 0)
         return;
 
-    double t = temperature / 100.0; // -1.0 … +1.0
+    double t = temperature / 100.0;
     double rScale = 1.0 - t * 0.30;
     double bScale = 1.0 + t * 0.30;
 
-    if (m_haveOpenCL) {
-        cv::UMat u;
-        bgr.copyTo(u);
-        std::vector<cv::UMat> chs;
-        cv::split(u, chs);
-        chs[0].convertTo(chs[0], -1, bScale, 0); // B
-        // G unchanged
-        chs[2].convertTo(chs[2], -1, rScale, 0); // R
-        cv::merge(chs, u);
-        u.copyTo(bgr);
-    } else {
-        cv::Mat lutAll(1, 256, CV_8UC3);
-        auto *q = lutAll.ptr<cv::Vec3b>();
-        for (int i = 0; i < 256; ++i) {
-            q[i][0] = cv::saturate_cast<uchar>(i * bScale); // B
-            q[i][1] = cv::saturate_cast<uchar>(i); // G
-            q[i][2] = cv::saturate_cast<uchar>(i * rScale); // R
-        }
-        cv::LUT(bgr, lutAll, m_work1);
-        cv::swap(bgr, m_work1);
+    cv::Mat lutAll(1, 256, CV_8UC3);
+    auto *q = lutAll.ptr<cv::Vec3b>();
+    for (int i = 0; i < 256; ++i) {
+        q[i][0] = cv::saturate_cast<uchar>(i * bScale); // B
+        q[i][1] = cv::saturate_cast<uchar>(i); // G
+        q[i][2] = cv::saturate_cast<uchar>(i * rScale); // R
     }
+    cv::LUT(bgr, lutAll, m_work1);
+    cv::swap(bgr, m_work1);
+}
+
+void OpenCVProcessor::applyColorTemperature(cv::UMat &bgr, int temperature)
+{
+    if (temperature == 0)
+        return;
+
+    double t = temperature / 100.0;
+    double rScale = 1.0 - t * 0.30;
+    double bScale = 1.0 + t * 0.30;
+
+    std::vector<cv::UMat> chs;
+    cv::split(bgr, chs);
+    chs[0].convertTo(chs[0], -1, bScale, 0); // B
+    chs[2].convertTo(chs[2], -1, rScale, 0); // R
+    cv::merge(chs, bgr);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

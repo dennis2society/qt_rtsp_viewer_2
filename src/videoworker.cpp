@@ -118,24 +118,44 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     cv::Mat bgr = m_processor->qImageToBGR(rawImage);
 
-    // 1. Brightness / Contrast (in-place)
-    if (st.brightnessAmount != 0 || st.contrastAmount != 0)
-        m_processor->applyBrightnessContrast(bgr, st.brightnessAmount, st.contrastAmount);
+    bool needsBrightContrast = (st.brightnessAmount != 0 || st.contrastAmount != 0);
+    bool needsColorTemp = (st.colorTemperature != 0);
+    bool needsBlur = (st.blurAmount > 0);
+    bool needsAdjust = needsBrightContrast || needsColorTemp || st.grayscaleEnabled || needsBlur;
 
-    // 2. Colour temperature (in-place)
-    if (st.colorTemperature != 0)
-        m_processor->applyColorTemperature(bgr, st.colorTemperature);
+    if (m_processor->haveOpenCL() && needsAdjust) {
+        // Single upload to GPU
+        cv::UMat uBgr;
+        bgr.copyTo(uBgr);
 
-    // 3. Grayscale (in-place)
-    if (st.grayscaleEnabled) {
-        cv::Mat gray;
-        cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
-        cv::cvtColor(gray, bgr, cv::COLOR_GRAY2BGR);
+        if (needsBrightContrast)
+            m_processor->applyBrightnessContrast(uBgr, st.brightnessAmount, st.contrastAmount);
+        if (needsColorTemp)
+            m_processor->applyColorTemperature(uBgr, st.colorTemperature);
+        if (st.grayscaleEnabled) {
+            cv::UMat uGray;
+            cv::cvtColor(uBgr, uGray, cv::COLOR_BGR2GRAY);
+            cv::cvtColor(uGray, uBgr, cv::COLOR_GRAY2BGR);
+        }
+        if (needsBlur)
+            m_processor->applyGaussBlur(uBgr, st.blurAmount);
+
+        // Single download from GPU
+        uBgr.copyTo(bgr);
+    } else {
+        // CPU path
+        if (needsBrightContrast)
+            m_processor->applyBrightnessContrast(bgr, st.brightnessAmount, st.contrastAmount);
+        if (needsColorTemp)
+            m_processor->applyColorTemperature(bgr, st.colorTemperature);
+        if (st.grayscaleEnabled) {
+            cv::Mat gray;
+            cv::cvtColor(bgr, gray, cv::COLOR_BGR2GRAY);
+            cv::cvtColor(gray, bgr, cv::COLOR_GRAY2BGR);
+        }
+        if (needsBlur)
+            m_processor->applyGaussBlur(bgr, st.blurAmount);
     }
-
-    // 4. Blur (in-place)
-    if (st.blurAmount > 0)
-        m_processor->applyGaussBlur(bgr, st.blurAmount);
 
     // 5. Prepare for detection — compute gray/BGR snapshots only if needed
     bool needsMotion = st.motionDetectionEnabled || st.motionVectorsEnabled || st.motionGraphEnabled || st.autoRecordEnabled;
