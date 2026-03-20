@@ -20,9 +20,9 @@ VideoWorker::VideoWorker(int streamId, QObject *parent)
     // Zero-interval timer drives frame processing on this thread's event loop.
     // It fires whenever the loop is idle, which naturally rate-limits processing
     // to the speed the CPU can handle while still servicing other slots.
-    auto *timer = new QTimer(this);
-    connect(timer, &QTimer::timeout, this, &VideoWorker::processPendingFrame);
-    timer->start(0);
+    // Started/stopped by setStreamActive() to avoid CPU usage when idle.
+    m_processTimer = new QTimer(this);
+    connect(m_processTimer, &QTimer::timeout, this, &VideoWorker::processPendingFrame);
 }
 
 VideoWorker::~VideoWorker()
@@ -33,13 +33,15 @@ VideoWorker::~VideoWorker()
 // ─────────────────────────────────────────────────────────────────────────────
 // Slots
 // ─────────────────────────────────────────────────────────────────────────────
-void VideoWorker::setPaused(bool p)
-{
-    m_paused = p;
-}
 void VideoWorker::setStreamActive(bool a)
 {
     m_streamActive = a;
+    if (a) {
+        if (!m_processTimer->isActive())
+            m_processTimer->start(0);
+    } else {
+        m_processTimer->stop();
+    }
 }
 void VideoWorker::setRecording(bool on)
 {
@@ -48,7 +50,6 @@ void VideoWorker::setRecording(bool on)
 void VideoWorker::resetStream()
 {
     m_cleanPrevious = QImage{};
-    m_frozenFrame = QImage{};
     m_processor->reset();
 }
 
@@ -97,15 +98,6 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
         m_fps = m_frameCount * 1000.0 / elapsed;
         m_frameCount = 0;
         m_fpsTimer = QDateTime::currentDateTime();
-    }
-
-    if (m_paused) {
-        if (!m_frozenFrame.isNull()) {
-            QImage out = m_frozenFrame.copy();
-            paintFpsOverlay(out);
-            emit frameReady(out);
-        }
-        return;
     }
 
     // Convert QVideoFrame → QImage
@@ -169,7 +161,6 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     // 12. Save clean frame for next iteration
     m_cleanPrevious = cleanImage;
-    m_frozenFrame = image;
 
     // 13. FPS / resolution / datetime overlay
     if (st.overlayEnabled)

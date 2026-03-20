@@ -32,8 +32,6 @@ VideoPlayer::VideoPlayer(int streamId, QWidget *parent)
     connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error, const QString &msg) {
         emit errorOccurred(msg);
     });
-
-    startWorker();
 }
 
 VideoPlayer::~VideoPlayer()
@@ -73,7 +71,6 @@ void VideoPlayer::startWorker()
     // latest frame atomically; worker's QTimer picks it up — drops stale frames)
     connect(m_captureSink, &QVideoSink::videoFrameChanged, m_worker, &VideoWorker::submitFrame, Qt::DirectConnection);
     connect(m_worker, &VideoWorker::frameReady, this, &VideoPlayer::displayFrame);
-    connect(this, &VideoPlayer::pauseStateChanged, m_worker, &VideoWorker::setPaused);
 
     // Recording frame pipeline: VideoWorker → RecordingWorker (cross-thread)
     connect(m_worker, &VideoWorker::frameForRecording, m_recorder, &RecordingWorker::enqueueFrame);
@@ -115,6 +112,9 @@ void VideoPlayer::stopWorker()
 // ─────────────────────────────────────────────────────────────────────────────
 void VideoPlayer::play(const QString &url)
 {
+    // Ensure worker threads are running
+    startWorker();
+
     if (m_worker)
         QMetaObject::invokeMethod(m_worker, "resetStream", Qt::BlockingQueuedConnection);
 
@@ -138,23 +138,13 @@ void VideoPlayer::stop()
     m_player->stop();
     m_player->setSource(QUrl());
 
+    // Tear down worker threads so they consume zero CPU when idle
+    stopWorker();
+
     StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
         s.playbackState = PlaybackState::Stopped;
     });
     emit playbackStopped();
-}
-
-void VideoPlayer::setPaused(bool paused)
-{
-    // Do NOT pause/resume QMediaPlayer — for live RTSP streams that would buffer
-    // frames and resume playback from the pause point instead of the current live
-    // position. The VideoWorker already handles visual pausing by freezing the
-    // last rendered frame while continuing to drain (and discard) incoming frames.
-    emit pauseStateChanged(paused);
-
-    StreamStateManager::instance().modifyState(m_streamId, [paused](StreamState &s) {
-        s.playbackState = paused ? PlaybackState::Paused : PlaybackState::Playing;
-    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

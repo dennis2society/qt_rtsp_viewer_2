@@ -5,8 +5,7 @@
 /// Playback state for a single stream.
 enum class PlaybackState {
     Stopped,
-    Playing,
-    Paused
+    Playing
 };
 
 /// All per-stream state.  Accessed from the UI thread (writes) and

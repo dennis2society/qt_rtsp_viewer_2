@@ -50,11 +50,6 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     m_playBtn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
     m_playBtn->setToolTip(QStringLiteral("Play"));
 
-    m_pauseBtn = new QPushButton;
-    m_pauseBtn->setIcon(style()->standardIcon(QStyle::SP_MediaPause));
-    m_pauseBtn->setCheckable(true);
-    m_pauseBtn->setToolTip(QStringLiteral("Pause"));
-
     m_stopBtn = new QPushButton;
     m_stopBtn->setIcon(style()->standardIcon(QStyle::SP_MediaStop));
     m_stopBtn->setToolTip(QStringLiteral("Stop"));
@@ -72,7 +67,6 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     ctrlLay->addWidget(m_cameraNameEdit);
     ctrlLay->addWidget(sep1);
     ctrlLay->addWidget(m_playBtn);
-    ctrlLay->addWidget(m_pauseBtn);
     ctrlLay->addWidget(m_stopBtn);
     ctrlLay->addWidget(sep2);
     ctrlLay->addWidget(m_recordBtn);
@@ -89,7 +83,6 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     // ── Connections ─────────────────────────────────────────────────
     connect(m_playBtn, &QPushButton::clicked, this, &StreamTab::onPlayClicked);
     connect(m_stopBtn, &QPushButton::clicked, this, &StreamTab::onStopClicked);
-    connect(m_pauseBtn, &QPushButton::toggled, this, &StreamTab::onPauseToggled);
     connect(m_recordBtn, &QPushButton::toggled, this, &StreamTab::onRecordToggled);
     connect(m_removeBtn, &QPushButton::clicked, this, &StreamTab::onRemoveUrlClicked);
 
@@ -213,9 +206,6 @@ void StreamTab::onPlayClicked()
     });
 
     m_player->play(url);
-    m_pauseBtn->blockSignals(true);
-    m_pauseBtn->setChecked(false);
-    m_pauseBtn->blockSignals(false);
     updateButtonStates();
 
     emit tabTitleChanged(m_streamId, cam);
@@ -232,25 +222,10 @@ void StreamTab::onStopClicked()
     m_recordBtn->blockSignals(false);
 
     m_player->stop();
-    m_pauseBtn->blockSignals(true);
-    m_pauseBtn->setChecked(false);
-    m_pauseBtn->blockSignals(false);
     updateButtonStates();
 
     StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
     emit statusMessage(QStringLiteral("Playback stopped: %1").arg(st.cameraName));
-}
-
-void StreamTab::onPauseToggled(bool checked)
-{
-    m_player->setPaused(checked);
-
-    StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
-    if (checked) {
-        emit statusMessage(QStringLiteral("Paused: %1").arg(st.cameraName));
-    } else {
-        emit statusMessage(QStringLiteral("Resumed: %1").arg(st.cameraName));
-    }
 }
 
 void StreamTab::onRecordToggled(bool checked)
@@ -303,10 +278,6 @@ void StreamTab::onRemoveUrlClicked()
     m_recordBtn->setChecked(false);
     m_recordBtn->setStyleSheet(QString());
     m_recordBtn->blockSignals(false);
-    m_pauseBtn->blockSignals(true);
-    m_pauseBtn->setChecked(false);
-    m_pauseBtn->blockSignals(false);
-
     // Remove from global URL history
     StreamStateManager::instance().removeUrlFromHistory(url);
 
@@ -333,10 +304,9 @@ void StreamTab::onUrlChanged(const QString &url)
 void StreamTab::updateButtonStates()
 {
     StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
-    bool playing = (st.playbackState == PlaybackState::Playing || st.playbackState == PlaybackState::Paused);
+    bool playing = (st.playbackState == PlaybackState::Playing);
 
     m_playBtn->setEnabled(!playing);
     m_stopBtn->setEnabled(playing);
-    m_pauseBtn->setEnabled(playing);
     m_recordBtn->setEnabled(playing);
 }

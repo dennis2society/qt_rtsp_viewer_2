@@ -31,7 +31,6 @@ public slots:
     /// frame and returns immediately — no heavy processing here.
     void submitFrame(const QVideoFrame &frame);
 
-    void setPaused(bool p);
     void setStreamActive(bool active);
     void resetStream(); // clears inter-frame state when URL changes
 
@@ -65,7 +64,6 @@ private:
     int m_streamId;
     OpenCVProcessor *m_processor = nullptr;
 
-    bool m_paused = false;
     bool m_streamActive = false;
 
     // FPS counter
@@ -75,7 +73,9 @@ private:
 
     // Clean-frame bookkeeping (for detection algorithms)
     QImage m_cleanPrevious;
-    QImage m_frozenFrame;
+
+    // Timer that drives frame processing — started/stopped with stream activity
+    QTimer *m_processTimer = nullptr;
 
     // ── Latest-frame storage (written by multimedia thread) ─────────
     QMutex m_frameMutex;

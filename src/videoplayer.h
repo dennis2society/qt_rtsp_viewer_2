@@ -26,7 +26,6 @@ public:
 
     void play(const QString &url);
     void stop();
-    void setPaused(bool paused);
 
     // recording
     void startRecording(const QString &path, const QString &codec, double fps);
@@ -42,9 +41,6 @@ signals:
     void recordingError(const QString &msg);
     void autoRecordingStarted(const QString &path);
     void autoRecordingStopped(const QString &path);
-
-    // internal
-    void pauseStateChanged(bool paused);
 
 private slots:
     void displayFrame(const QImage &image);

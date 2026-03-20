@@ -37,7 +37,6 @@ signals:
 private slots:
     void onPlayClicked();
     void onStopClicked();
-    void onPauseToggled(bool checked);
     void onRecordToggled(bool checked);
     void onRemoveUrlClicked();
     void onCameraNameEdited(const QString &name);
@@ -55,7 +54,6 @@ private:
     QPushButton *m_removeBtn = nullptr;
     QLineEdit *m_cameraNameEdit = nullptr;
     QPushButton *m_playBtn = nullptr;
-    QPushButton *m_pauseBtn = nullptr;
     QPushButton *m_stopBtn = nullptr;
     QPushButton *m_recordBtn = nullptr;
     VideoPlayer *m_player = nullptr;
