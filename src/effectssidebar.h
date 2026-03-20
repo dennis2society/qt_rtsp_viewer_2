@@ -22,6 +22,8 @@ public:
     /// Rebind all controls to the stream with the given id.
     void bindToStream(int streamId);
 
+    QSize sizeHint() const override;
+
 signals:
     /// Emitted when any per-stream effect parameter changes.
     void effectsChanged(int streamId);

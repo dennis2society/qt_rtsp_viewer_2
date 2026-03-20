@@ -46,6 +46,7 @@ MainWindow::MainWindow(QWidget *parent)
     scroll->setWidgetResizable(true);
     scroll->setMinimumWidth(210);
     scroll->setMaximumWidth(280);
+    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_sidebar = new EffectsSidebar;
     scroll->setWidget(m_sidebar);
     hlay->addWidget(scroll);
