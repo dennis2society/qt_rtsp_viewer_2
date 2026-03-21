@@ -78,6 +78,7 @@ void OnvifClient::postSoap(const QUrl &url, const QByteArray &soap, const QByteA
     qDebug() << "[ONVIF] Request body:" << soap.left(2000);
 
     emit soapLog(QStringLiteral("→ POST %1  action=%2  (%3 bytes)").arg(url.toString(), QString::fromLatin1(soapAction)).arg(soap.size()));
+    emit soapLog(QString::fromUtf8(soap));
 
     QNetworkRequest req(url);
     QByteArray ct = QByteArrayLiteral("application/soap+xml; charset=utf-8");
@@ -184,7 +185,7 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
 {
     // Elements MUST follow ImagingSettings20 xs:sequence order from the ONVIF WSDL:
     //   BacklightCompensation, Brightness, ColorSaturation, Contrast,
-    //   Exposure, Focus, IrCutFilter, Sharpness, WideDynamicRange, …
+    //   Exposure, Focus, IrCutFilter, Sharpness, WideDynamicRange, WhiteBalance
     QString inner;
     if (settings.backlightCompLevel) {
         inner += QStringLiteral(
@@ -201,6 +202,33 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
         inner += QStringLiteral("<tt:ColorSaturation>%1</tt:ColorSaturation>").arg(*settings.colorSaturation, 0, 'f', 1);
     if (settings.contrast)
         inner += QStringLiteral("<tt:Contrast>%1</tt:Contrast>").arg(*settings.contrast, 0, 'f', 1);
+
+    // Exposure – must appear between Contrast and IrCutFilter per schema order
+    if (!settings.exposureMode.isEmpty()) {
+        QString exp = QStringLiteral("<tt:Mode>%1</tt:Mode>").arg(settings.exposureMode);
+        if (!settings.exposurePriority.isEmpty())
+            exp += QStringLiteral("<tt:Priority>%1</tt:Priority>").arg(settings.exposurePriority);
+        if (settings.minExposureTime)
+            exp += QStringLiteral("<tt:MinExposureTime>%1</tt:MinExposureTime>").arg(*settings.minExposureTime, 0, 'f', 2);
+        if (settings.maxExposureTime)
+            exp += QStringLiteral("<tt:MaxExposureTime>%1</tt:MaxExposureTime>").arg(*settings.maxExposureTime, 0, 'f', 2);
+        if (settings.minGain)
+            exp += QStringLiteral("<tt:MinGain>%1</tt:MinGain>").arg(*settings.minGain, 0, 'f', 1);
+        if (settings.maxGain)
+            exp += QStringLiteral("<tt:MaxGain>%1</tt:MaxGain>").arg(*settings.maxGain, 0, 'f', 1);
+        if (settings.minIris)
+            exp += QStringLiteral("<tt:MinIris>%1</tt:MinIris>").arg(*settings.minIris, 0, 'f', 1);
+        if (settings.maxIris)
+            exp += QStringLiteral("<tt:MaxIris>%1</tt:MaxIris>").arg(*settings.maxIris, 0, 'f', 1);
+        if (settings.exposureTime)
+            exp += QStringLiteral("<tt:ExposureTime>%1</tt:ExposureTime>").arg(*settings.exposureTime, 0, 'f', 2);
+        if (settings.gain)
+            exp += QStringLiteral("<tt:Gain>%1</tt:Gain>").arg(*settings.gain, 0, 'f', 1);
+        if (settings.iris)
+            exp += QStringLiteral("<tt:Iris>%1</tt:Iris>").arg(*settings.iris, 0, 'f', 1);
+        inner += QStringLiteral("<tt:Exposure>%1</tt:Exposure>").arg(exp);
+    }
+
     if (!settings.irCutFilter.isEmpty())
         inner += QStringLiteral("<tt:IrCutFilter>%1</tt:IrCutFilter>").arg(settings.irCutFilter);
     if (settings.sharpness)
@@ -215,10 +243,21 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
                      .arg(*settings.wdrLevel, 0, 'f', 1);
     }
 
+    // WhiteBalance – per schema order, after WideDynamicRange
+    if (!settings.whiteBalanceMode.isEmpty()) {
+        QString wb = QStringLiteral("<tt:Mode>%1</tt:Mode>").arg(settings.whiteBalanceMode);
+        if (settings.crGain)
+            wb += QStringLiteral("<tt:CrGain>%1</tt:CrGain>").arg(*settings.crGain, 0, 'f', 1);
+        if (settings.cbGain)
+            wb += QStringLiteral("<tt:CbGain>%1</tt:CbGain>").arg(*settings.cbGain, 0, 'f', 1);
+        inner += QStringLiteral("<tt:WhiteBalance>%1</tt:WhiteBalance>").arg(wb);
+    }
+
     QString body = QStringLiteral(
                        "<timg:SetImagingSettings>"
                        "<timg:VideoSourceToken>%1</timg:VideoSourceToken>"
                        "<timg:ImagingSettings>%2</timg:ImagingSettings>"
+                       "<timg:ForcePersistence>true</timg:ForcePersistence>"
                        "</timg:SetImagingSettings>")
                        .arg(token.toHtmlEscaped(), inner);
 
@@ -356,6 +395,8 @@ OnvifImagingSettings OnvifClient::parseImagingSettings(const QByteArray &data)
     bool inImaging = false;
     bool inBacklight = false;
     bool inWDR = false;
+    bool inExposure = false;
+    bool inWhiteBalance = false;
 
     while (!xml.atEnd()) {
         xml.readNext();
@@ -368,6 +409,10 @@ OnvifImagingSettings OnvifClient::parseImagingSettings(const QByteArray &data)
                     inBacklight = true;
                 else if (name == QLatin1String("WideDynamicRange"))
                     inWDR = true;
+                else if (name == QLatin1String("Exposure"))
+                    inExposure = true;
+                else if (name == QLatin1String("WhiteBalance"))
+                    inWhiteBalance = true;
                 else if (inBacklight) {
                     if (name == QLatin1String("Mode"))
                         s.backlightCompEnabled = (xml.readElementText() == QLatin1String("ON"));
@@ -378,6 +423,36 @@ OnvifImagingSettings OnvifClient::parseImagingSettings(const QByteArray &data)
                         s.wdrEnabled = (xml.readElementText() == QLatin1String("ON"));
                     else if (name == QLatin1String("Level"))
                         s.wdrLevel = xml.readElementText().toDouble();
+                } else if (inExposure) {
+                    if (name == QLatin1String("Mode"))
+                        s.exposureMode = xml.readElementText();
+                    else if (name == QLatin1String("Priority"))
+                        s.exposurePriority = xml.readElementText();
+                    else if (name == QLatin1String("MinExposureTime"))
+                        s.minExposureTime = xml.readElementText().toDouble();
+                    else if (name == QLatin1String("MaxExposureTime"))
+                        s.maxExposureTime = xml.readElementText().toDouble();
+                    else if (name == QLatin1String("MinGain"))
+                        s.minGain = xml.readElementText().toDouble();
+                    else if (name == QLatin1String("MaxGain"))
+                        s.maxGain = xml.readElementText().toDouble();
+                    else if (name == QLatin1String("MinIris"))
+                        s.minIris = xml.readElementText().toDouble();
+                    else if (name == QLatin1String("MaxIris"))
+                        s.maxIris = xml.readElementText().toDouble();
+                    else if (name == QLatin1String("ExposureTime"))
+                        s.exposureTime = xml.readElementText().toDouble();
+                    else if (name == QLatin1String("Gain"))
+                        s.gain = xml.readElementText().toDouble();
+                    else if (name == QLatin1String("Iris"))
+                        s.iris = xml.readElementText().toDouble();
+                } else if (inWhiteBalance) {
+                    if (name == QLatin1String("Mode"))
+                        s.whiteBalanceMode = xml.readElementText();
+                    else if (name == QLatin1String("CrGain"))
+                        s.crGain = xml.readElementText().toDouble();
+                    else if (name == QLatin1String("CbGain"))
+                        s.cbGain = xml.readElementText().toDouble();
                 } else if (name == QLatin1String("Brightness"))
                     s.brightness = xml.readElementText().toDouble();
                 else if (name == QLatin1String("ColorSaturation"))
@@ -395,6 +470,10 @@ OnvifImagingSettings OnvifClient::parseImagingSettings(const QByteArray &data)
                 inBacklight = false;
             else if (name == QLatin1String("WideDynamicRange"))
                 inWDR = false;
+            else if (name == QLatin1String("Exposure"))
+                inExposure = false;
+            else if (name == QLatin1String("WhiteBalance"))
+                inWhiteBalance = false;
             else if (name == QLatin1String("ImagingSettings"))
                 inImaging = false;
         }
@@ -414,6 +493,10 @@ OnvifImagingOptions OnvifClient::parseImagingOptions(const QByteArray &data)
     // Nested elements inside BacklightCompensation/WideDynamicRange level
     bool inBLC = false, inWDR = false, inLevel = false;
     double levelMin = 0, levelMax = 100;
+    // Exposure / WhiteBalance option blocks
+    bool inExposure = false, inWhiteBalance = false;
+    QString expSubRange; // current sub-element inside Exposure (e.g. "ExposureTime")
+    double subMin = 0, subMax = 0;
 
     while (!xml.atEnd()) {
         xml.readNext();
@@ -422,7 +505,7 @@ OnvifImagingOptions OnvifClient::parseImagingOptions(const QByteArray &data)
             if (name == QLatin1String("ImagingOptions") || name == QLatin1String("ImagingOptions20")) {
                 inOptions = true;
             } else if (inOptions) {
-                if (!inBLC && !inWDR && !inLevel && currentRange.isEmpty()) {
+                if (!inBLC && !inWDR && !inLevel && !inExposure && !inWhiteBalance && currentRange.isEmpty()) {
                     if (name == QLatin1String("Brightness") || name == QLatin1String("ColorSaturation") || name == QLatin1String("Contrast")
                         || name == QLatin1String("Sharpness")) {
                         currentRange = name;
@@ -436,6 +519,43 @@ OnvifImagingOptions OnvifClient::parseImagingOptions(const QByteArray &data)
                         o.hasWDR = true;
                     } else if (name == QLatin1String("IrCutFilterModes")) {
                         o.hasIrCutFilter = true;
+                    } else if (name == QLatin1String("Exposure")) {
+                        inExposure = true;
+                        o.hasExposure = true;
+                    } else if (name == QLatin1String("WhiteBalance")) {
+                        inWhiteBalance = true;
+                        o.hasWhiteBalance = true;
+                    }
+                } else if (inExposure) {
+                    if (name == QLatin1String("Mode")) {
+                        o.exposureModes << xml.readElementText();
+                    } else if (expSubRange.isEmpty()
+                               && (name == QLatin1String("MinExposureTime") || name == QLatin1String("MaxExposureTime") || name == QLatin1String("MinGain")
+                                   || name == QLatin1String("MaxGain") || name == QLatin1String("ExposureTime") || name == QLatin1String("Gain")
+                                   || name == QLatin1String("Iris"))) {
+                        expSubRange = name;
+                        subMin = 0;
+                        subMax = 100;
+                    } else if (!expSubRange.isEmpty()) {
+                        if (name == QLatin1String("Min"))
+                            subMin = xml.readElementText().toDouble();
+                        else if (name == QLatin1String("Max"))
+                            subMax = xml.readElementText().toDouble();
+                    }
+                } else if (inWhiteBalance) {
+                    if (name == QLatin1String("Mode")) {
+                        o.whiteBalanceModes << xml.readElementText();
+                    } else if (expSubRange.isEmpty()
+                               && (name == QLatin1String("YrGain") || name == QLatin1String("YbGain") || name == QLatin1String("CrGain")
+                                   || name == QLatin1String("CbGain"))) {
+                        expSubRange = name;
+                        subMin = 0;
+                        subMax = 100;
+                    } else if (!expSubRange.isEmpty()) {
+                        if (name == QLatin1String("Min"))
+                            subMin = xml.readElementText().toDouble();
+                        else if (name == QLatin1String("Max"))
+                            subMax = xml.readElementText().toDouble();
                     }
                 } else if ((inBLC || inWDR) && name == QLatin1String("Level")) {
                     inLevel = true;
@@ -466,6 +586,34 @@ OnvifImagingOptions OnvifClient::parseImagingOptions(const QByteArray &data)
                 inBLC = false;
             } else if (name == QLatin1String("WideDynamicRange")) {
                 inWDR = false;
+            } else if (inExposure && !expSubRange.isEmpty() && name == expSubRange) {
+                OnvifImagingOptions::Range r{subMin, subMax};
+                if (expSubRange == QLatin1String("ExposureTime"))
+                    o.exposureTimeRange = r;
+                else if (expSubRange == QLatin1String("Gain"))
+                    o.gainRange = r;
+                else if (expSubRange == QLatin1String("Iris"))
+                    o.irisRange = r;
+                else if (expSubRange == QLatin1String("MinExposureTime"))
+                    o.minExposureTimeRange = r;
+                else if (expSubRange == QLatin1String("MaxExposureTime"))
+                    o.maxExposureTimeRange = r;
+                else if (expSubRange == QLatin1String("MinGain"))
+                    o.minGainRange = r;
+                else if (expSubRange == QLatin1String("MaxGain"))
+                    o.maxGainRange = r;
+                expSubRange.clear();
+            } else if (inWhiteBalance && !expSubRange.isEmpty() && name == expSubRange) {
+                OnvifImagingOptions::Range r{subMin, subMax};
+                if (expSubRange == QLatin1String("YrGain") || expSubRange == QLatin1String("CrGain"))
+                    o.crGainRange = r;
+                else if (expSubRange == QLatin1String("YbGain") || expSubRange == QLatin1String("CbGain"))
+                    o.cbGainRange = r;
+                expSubRange.clear();
+            } else if (name == QLatin1String("Exposure")) {
+                inExposure = false;
+            } else if (name == QLatin1String("WhiteBalance")) {
+                inWhiteBalance = false;
             } else if (!currentRange.isEmpty() && name == currentRange) {
                 OnvifImagingOptions::Range r{rangeMin, rangeMax};
                 if (currentRange == QLatin1String("Brightness"))

@@ -87,6 +87,23 @@ private:
     QSlider *m_wdrSlider = nullptr;
     QLabel *m_wdrVal = nullptr;
 
+    // Exposure widgets
+    QLabel *m_exposureModeLabel = nullptr;
+    QComboBox *m_exposureModeCombo = nullptr;
+    QLabel *m_exposureTimeLabel = nullptr;
+    QSlider *m_exposureTimeSlider = nullptr;
+    QLabel *m_exposureTimeVal = nullptr;
+    QLabel *m_gainLabel = nullptr;
+    QSlider *m_gainSlider = nullptr;
+    QLabel *m_gainVal = nullptr;
+    QLabel *m_irisLabel = nullptr;
+    QSlider *m_irisSlider = nullptr;
+    QLabel *m_irisVal = nullptr;
+
+    // WhiteBalance widgets
+    QLabel *m_wbModeLabel = nullptr;
+    QComboBox *m_wbModeCombo = nullptr;
+
     QPushButton *m_applyBtn = nullptr;
     QPushButton *m_refreshBtn = nullptr;
     QPushButton *m_closeBtn = nullptr;

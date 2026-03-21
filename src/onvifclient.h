@@ -41,6 +41,24 @@ struct OnvifImagingSettings {
     std::optional<double> backlightCompLevel;
     bool wdrEnabled = false;
     std::optional<double> wdrLevel;
+
+    // Exposure
+    QString exposureMode; // "AUTO", "MANUAL"
+    QString exposurePriority; // "LowNoise", "FrameRate"
+    std::optional<double> exposureTime;
+    std::optional<double> gain;
+    std::optional<double> iris;
+    std::optional<double> minExposureTime;
+    std::optional<double> maxExposureTime;
+    std::optional<double> minGain;
+    std::optional<double> maxGain;
+    std::optional<double> minIris;
+    std::optional<double> maxIris;
+
+    // WhiteBalance
+    QString whiteBalanceMode; // "AUTO", "MANUAL"
+    std::optional<double> crGain;
+    std::optional<double> cbGain;
 };
 
 /// Allowable ranges for imaging settings.
@@ -59,6 +77,23 @@ struct OnvifImagingOptions {
     std::optional<Range> backlightLevel;
     bool hasWDR = false;
     std::optional<Range> wdrLevel;
+
+    // Exposure options
+    bool hasExposure = false;
+    QStringList exposureModes; // e.g. {"AUTO", "MANUAL"}
+    std::optional<Range> exposureTimeRange;
+    std::optional<Range> gainRange;
+    std::optional<Range> irisRange;
+    std::optional<Range> minExposureTimeRange;
+    std::optional<Range> maxExposureTimeRange;
+    std::optional<Range> minGainRange;
+    std::optional<Range> maxGainRange;
+
+    // WhiteBalance options
+    bool hasWhiteBalance = false;
+    QStringList whiteBalanceModes; // e.g. {"AUTO", "MANUAL"}
+    std::optional<Range> crGainRange;
+    std::optional<Range> cbGainRange;
 };
 
 /// Queries an ONVIF device for its GetCapabilities response via SOAP 1.2

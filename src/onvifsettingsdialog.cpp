@@ -144,6 +144,44 @@ void OnvifSettingsDialog::setupUI()
     });
     ++row;
 
+    // ── Exposure group ──────────────────────────────────────────────
+    m_exposureModeLabel = new QLabel(QStringLiteral("Exposure Mode:"));
+    m_exposureModeCombo = new QComboBox;
+    m_exposureModeCombo->addItems({QStringLiteral("AUTO"), QStringLiteral("MANUAL")});
+    imgLay->addWidget(m_exposureModeLabel, row, 0);
+    imgLay->addWidget(m_exposureModeCombo, row, 1, 1, 2);
+    ++row;
+
+    auto addExpSlider = [&](const QString &text, QLabel *&label, QSlider *&slider, QLabel *&valLabel) {
+        label = new QLabel(text);
+        slider = new QSlider(Qt::Horizontal);
+        slider->setRange(0, 100);
+        valLabel = new QLabel(QStringLiteral("—"));
+        valLabel->setMinimumWidth(50);
+        valLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        imgLay->addWidget(label, row, 0);
+        imgLay->addWidget(slider, row, 1);
+        imgLay->addWidget(valLabel, row, 2);
+        connect(slider, &QSlider::valueChanged, valLabel, [valLabel, slider](int v) {
+            Q_UNUSED(v);
+            // Show the real double value mapped from slider position
+            valLabel->setText(QString::number(slider->value()));
+        });
+        ++row;
+    };
+
+    addExpSlider(QStringLiteral("Exposure Time:"), m_exposureTimeLabel, m_exposureTimeSlider, m_exposureTimeVal);
+    addExpSlider(QStringLiteral("Gain:"), m_gainLabel, m_gainSlider, m_gainVal);
+    addExpSlider(QStringLiteral("Iris:"), m_irisLabel, m_irisSlider, m_irisVal);
+
+    // ── White Balance ───────────────────────────────────────────────
+    m_wbModeLabel = new QLabel(QStringLiteral("White Balance:"));
+    m_wbModeCombo = new QComboBox;
+    m_wbModeCombo->addItems({QStringLiteral("AUTO"), QStringLiteral("MANUAL")});
+    imgLay->addWidget(m_wbModeLabel, row, 0);
+    imgLay->addWidget(m_wbModeCombo, row, 1, 1, 2);
+    ++row;
+
     mainLay->addWidget(m_imagingGroup);
 
     // ── Buttons ─────────────────────────────────────────────────────
@@ -510,6 +548,43 @@ void OnvifSettingsDialog::populateImagingUI()
         m_wdrVal->setText(QString::number(v));
     }
 
+    // Exposure
+    bool hasExp = m_options.hasExposure;
+    m_exposureModeLabel->setVisible(hasExp);
+    m_exposureModeCombo->setVisible(hasExp);
+    if (hasExp) {
+        m_exposureModeCombo->clear();
+        if (!m_options.exposureModes.isEmpty())
+            m_exposureModeCombo->addItems(m_options.exposureModes);
+        else
+            m_exposureModeCombo->addItems({QStringLiteral("AUTO"), QStringLiteral("MANUAL")});
+        if (!m_currentSettings.exposureMode.isEmpty()) {
+            int idx = m_exposureModeCombo->findText(m_currentSettings.exposureMode);
+            if (idx >= 0)
+                m_exposureModeCombo->setCurrentIndex(idx);
+        }
+    }
+    configSlider(m_exposureTimeLabel, m_exposureTimeSlider, m_exposureTimeVal, m_options.exposureTimeRange, m_currentSettings.exposureTime);
+    configSlider(m_gainLabel, m_gainSlider, m_gainVal, m_options.gainRange, m_currentSettings.gain);
+    configSlider(m_irisLabel, m_irisSlider, m_irisVal, m_options.irisRange, m_currentSettings.iris);
+
+    // WhiteBalance
+    bool hasWB = m_options.hasWhiteBalance;
+    m_wbModeLabel->setVisible(hasWB);
+    m_wbModeCombo->setVisible(hasWB);
+    if (hasWB) {
+        m_wbModeCombo->clear();
+        if (!m_options.whiteBalanceModes.isEmpty())
+            m_wbModeCombo->addItems(m_options.whiteBalanceModes);
+        else
+            m_wbModeCombo->addItems({QStringLiteral("AUTO"), QStringLiteral("MANUAL")});
+        if (!m_currentSettings.whiteBalanceMode.isEmpty()) {
+            int idx = m_wbModeCombo->findText(m_currentSettings.whiteBalanceMode);
+            if (idx >= 0)
+                m_wbModeCombo->setCurrentIndex(idx);
+        }
+    }
+
     setImagingUIEnabled(true);
 }
 
@@ -538,6 +613,41 @@ OnvifImagingSettings OnvifSettingsDialog::gatherSettings() const
     if (m_wdrCheck->isVisible()) {
         s.wdrEnabled = m_wdrCheck->isChecked();
         s.wdrLevel = m_wdrSlider->value();
+    }
+
+    // Exposure – always send current mode so camera doesn't reset to defaults
+    if (m_exposureModeCombo->isVisible()) {
+        s.exposureMode = m_exposureModeCombo->currentText();
+        // Preserve AUTO-mode limits from what the camera reported
+        if (m_currentSettings.exposurePriority.size())
+            s.exposurePriority = m_currentSettings.exposurePriority;
+        if (m_currentSettings.minExposureTime)
+            s.minExposureTime = m_currentSettings.minExposureTime;
+        if (m_currentSettings.maxExposureTime)
+            s.maxExposureTime = m_currentSettings.maxExposureTime;
+        if (m_currentSettings.minGain)
+            s.minGain = m_currentSettings.minGain;
+        if (m_currentSettings.maxGain)
+            s.maxGain = m_currentSettings.maxGain;
+        if (m_currentSettings.minIris)
+            s.minIris = m_currentSettings.minIris;
+        if (m_currentSettings.maxIris)
+            s.maxIris = m_currentSettings.maxIris;
+    }
+    if (m_exposureTimeSlider->isVisible())
+        s.exposureTime = m_exposureTimeSlider->value();
+    if (m_gainSlider->isVisible())
+        s.gain = m_gainSlider->value();
+    if (m_irisSlider->isVisible())
+        s.iris = m_irisSlider->value();
+
+    // WhiteBalance
+    if (m_wbModeCombo->isVisible()) {
+        s.whiteBalanceMode = m_wbModeCombo->currentText();
+        if (m_currentSettings.crGain)
+            s.crGain = m_currentSettings.crGain;
+        if (m_currentSettings.cbGain)
+            s.cbGain = m_currentSettings.cbGain;
     }
 
     return s;
