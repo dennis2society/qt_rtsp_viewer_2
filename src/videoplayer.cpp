@@ -3,29 +3,35 @@
 #include "streamstatemanager.h"
 #include "videoworker.h"
 
+#include <QLabel>
 #include <QMediaPlayer>
+#include <QPixmap>
 #include <QThread>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QVideoFrame>
 #include <QVideoSink>
-#include <QVideoWidget>
 
 // ─────────────────────────────────────────────────────────────────────────────
 VideoPlayer::VideoPlayer(int streamId, QWidget *parent)
     : QWidget(parent)
     , m_streamId(streamId)
 {
-    m_videoWidget = new QVideoWidget(this);
+    m_displayLabel = new QLabel(this);
+    m_displayLabel->setAlignment(Qt::AlignCenter);
+    m_displayLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_displayLabel->setStyleSheet(QStringLiteral("background-color: black;"));
+    m_displayLabel->setMinimumSize(1, 1);
+
     m_captureSink = new QVideoSink(this);
     m_player = new QMediaPlayer(this);
 
-    // Player sends frames to our capture sink (not directly to the video widget)
+    // Player sends frames to our capture sink for processing
     m_player->setVideoOutput(m_captureSink);
 
     auto *layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
-    layout->addWidget(m_videoWidget);
+    layout->addWidget(m_displayLabel);
     setLayout(layout);
 
     // Error forwarding
@@ -186,7 +192,7 @@ void VideoPlayer::stopRecording()
 // ─────────────────────────────────────────────────────────────────────────────
 void VideoPlayer::displayFrame(const QImage &image)
 {
-    if (image.isNull() || !m_videoWidget->videoSink())
+    if (image.isNull())
         return;
-    m_videoWidget->videoSink()->setVideoFrame(QVideoFrame(image));
+    m_displayLabel->setPixmap(QPixmap::fromImage(image).scaled(m_displayLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
 }

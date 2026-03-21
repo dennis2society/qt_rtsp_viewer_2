@@ -2,14 +2,14 @@
 
 #include <QWidget>
 
+class QLabel;
 class QMediaPlayer;
-class QVideoWidget;
 class QVideoSink;
 class QThread;
 class VideoWorker;
 class RecordingWorker;
 
-/// Widget that wraps QMediaPlayer + QVideoWidget + worker thread.
+/// Widget that wraps QMediaPlayer + QLabel display + worker thread.
 /// One instance per stream tab.
 class VideoPlayer : public QWidget
 {
@@ -50,8 +50,8 @@ private:
     void stopWorker();
 
     int m_streamId;
+    QLabel *m_displayLabel = nullptr;
     QMediaPlayer *m_player = nullptr;
-    QVideoWidget *m_videoWidget = nullptr;
     QVideoSink *m_captureSink = nullptr;
 
     // Video processing thread
