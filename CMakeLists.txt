@@ -19,9 +19,46 @@ find_package(Qt6 REQUIRED COMPONENTS
 find_package(OpenCV REQUIRED)
 
 # ── FFmpeg (optional) ────────────────────────────────────────────────────────
+# On Linux, pkg-config finds FFmpeg automatically.
+# On Windows, pass -DFFMPEG_DIR=<path-to-ffmpeg> where the path contains
+# include/ and lib/ subdirectories (e.g. a vcpkg or MSYS2 install, or an
+# official FFmpeg shared/dev download).
+set(FFMPEG_DIR "" CACHE PATH "Root directory of an FFmpeg installation (contains include/ and lib/)")
+
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(FFMPEG libavcodec libavformat libavutil libswscale)
+endif()
+
+# Fallback: manual discovery via FFMPEG_DIR (useful on Windows)
+if(NOT FFMPEG_FOUND AND FFMPEG_DIR)
+    set(_ffmpeg_inc "${FFMPEG_DIR}/include")
+    set(_ffmpeg_lib "${FFMPEG_DIR}/lib")
+
+    if(EXISTS "${_ffmpeg_inc}/libavcodec/avcodec.h" AND EXISTS "${_ffmpeg_lib}")
+        set(FFMPEG_FOUND TRUE)
+        set(FFMPEG_INCLUDE_DIRS "${_ffmpeg_inc}")
+        set(FFMPEG_LIBRARY_DIRS "${_ffmpeg_lib}")
+
+        # Locate each required library
+        set(FFMPEG_LIBRARIES "")
+        foreach(_lib avcodec avformat avutil swscale)
+            find_library(_ffmpeg_${_lib}
+                NAMES ${_lib}
+                PATHS "${_ffmpeg_lib}"
+                NO_DEFAULT_PATH
+            )
+            if(_ffmpeg_${_lib})
+                list(APPEND FFMPEG_LIBRARIES "${_ffmpeg_${_lib}}")
+            else()
+                message(WARNING "FFmpeg library '${_lib}' not found in ${_ffmpeg_lib}")
+                set(FFMPEG_FOUND FALSE)
+                break()
+            endif()
+        endforeach()
+    else()
+        message(WARNING "FFMPEG_DIR is set but ${_ffmpeg_inc}/libavcodec/avcodec.h or ${_ffmpeg_lib} not found")
+    endif()
 endif()
 
 # ── Sources ──────────────────────────────────────────────────────────────────
