@@ -2,6 +2,7 @@
 
 #include <QCryptographicHash>
 #include <QDateTime>
+#include <QDebug>
 #include <QNetworkAccessManager>
 #include <QNetworkReply>
 #include <QNetworkRequest>
@@ -71,18 +72,36 @@ QByteArray OnvifClient::wrapSoap(const QString &body, const QString &user, const
         .toUtf8();
 }
 
-void OnvifClient::postSoap(const QUrl &url, const QByteArray &soap, std::function<void(const QByteArray &)> onSuccess)
+void OnvifClient::postSoap(const QUrl &url, const QByteArray &soap, const QByteArray &soapAction, std::function<void(const QByteArray &)> onSuccess)
 {
+    qDebug() << "[ONVIF] POST" << url.toString();
+    qDebug() << "[ONVIF] Request body:" << soap.left(2000);
+
+    emit soapLog(QStringLiteral("→ POST %1  action=%2  (%3 bytes)").arg(url.toString(), QString::fromLatin1(soapAction)).arg(soap.size()));
+
     QNetworkRequest req(url);
-    req.setHeader(QNetworkRequest::ContentTypeHeader, QByteArrayLiteral("application/soap+xml; charset=utf-8"));
+    QByteArray ct = QByteArrayLiteral("application/soap+xml; charset=utf-8");
+    if (!soapAction.isEmpty())
+        ct += QByteArrayLiteral("; action=\"") + soapAction + QByteArrayLiteral("\"");
+    req.setHeader(QNetworkRequest::ContentTypeHeader, ct);
+    req.setRawHeader(QByteArrayLiteral("SOAPAction"), QByteArrayLiteral("\"") + soapAction + QByteArrayLiteral("\""));
     auto *reply = m_nam->post(req, soap);
     connect(reply, &QNetworkReply::finished, this, [this, reply, onSuccess = std::move(onSuccess)]() {
         reply->deleteLater();
+        const QByteArray body = reply->readAll();
+        int httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        qDebug() << "[ONVIF] Response HTTP" << httpStatus << "size:" << body.size();
+        qDebug() << "[ONVIF] Response body:" << body.left(2000);
+
+        emit soapLog(QStringLiteral("← HTTP %1  (%2 bytes)").arg(httpStatus).arg(body.size()));
+
         if (reply->error() != QNetworkReply::NoError) {
-            emit queryFailed(reply->errorString());
+            QString fault = parseSoapFault(body);
+            QString errMsg = fault.isEmpty() ? reply->errorString() : fault;
+            errMsg = QStringLiteral("HTTP %1: %2").arg(httpStatus).arg(errMsg);
+            emit queryFailed(errMsg);
             return;
         }
-        const QByteArray body = reply->readAll();
         QString fault = parseSoapFault(body);
         if (!fault.isEmpty()) {
             emit queryFailed(fault);
@@ -105,7 +124,7 @@ void OnvifClient::fetchCapabilities(const QString &host, quint16 port, const QSt
 
     QByteArray soap = wrapSoap(QStringLiteral("<tds:GetCapabilities><tds:Category>All</tds:Category></tds:GetCapabilities>"), user, pass);
 
-    postSoap(url, soap, [this](const QByteArray &data) {
+    postSoap(url, soap, QByteArrayLiteral("http://www.onvif.org/ver10/device/wsdl/GetCapabilities"), [this](const QByteArray &data) {
         OnvifCapabilities caps = parseCapabilities(data);
         if (caps.valid)
             emit capabilitiesReady(caps);
@@ -117,7 +136,7 @@ void OnvifClient::fetchCapabilities(const QString &host, quint16 port, const QSt
 void OnvifClient::fetchVideoSources(const QString &mediaXAddr, const QString &user, const QString &pass)
 {
     QByteArray soap = wrapSoap(QStringLiteral("<trt:GetVideoSources/>"), user, pass);
-    postSoap(QUrl(mediaXAddr), soap, [this](const QByteArray &data) {
+    postSoap(QUrl(mediaXAddr), soap, QByteArrayLiteral("http://www.onvif.org/ver10/media/wsdl/GetVideoSources"), [this](const QByteArray &data) {
         QStringList tokens = parseVideoSources(data);
         emit videoSourcesReady(tokens);
     });
@@ -131,7 +150,7 @@ void OnvifClient::fetchImagingSettings(const QString &imagingXAddr, const QStrin
                                    .arg(token.toHtmlEscaped()),
                                user,
                                pass);
-    postSoap(QUrl(imagingXAddr), soap, [this](const QByteArray &data) {
+    postSoap(QUrl(imagingXAddr), soap, QByteArrayLiteral("http://www.onvif.org/ver20/imaging/wsdl/GetImagingSettings"), [this](const QByteArray &data) {
         OnvifImagingSettings s = parseImagingSettings(data);
         if (s.valid)
             emit imagingSettingsReady(s);
@@ -148,7 +167,7 @@ void OnvifClient::fetchImagingOptions(const QString &imagingXAddr, const QString
                                    .arg(token.toHtmlEscaped()),
                                user,
                                pass);
-    postSoap(QUrl(imagingXAddr), soap, [this](const QByteArray &data) {
+    postSoap(QUrl(imagingXAddr), soap, QByteArrayLiteral("http://www.onvif.org/ver20/imaging/wsdl/GetOptions"), [this](const QByteArray &data) {
         OnvifImagingOptions o = parseImagingOptions(data);
         if (o.valid)
             emit imagingOptionsReady(o);
@@ -163,17 +182,10 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
                                        const QString &user,
                                        const QString &pass)
 {
+    // Elements MUST follow ImagingSettings20 xs:sequence order from the ONVIF WSDL:
+    //   BacklightCompensation, Brightness, ColorSaturation, Contrast,
+    //   Exposure, Focus, IrCutFilter, Sharpness, WideDynamicRange, …
     QString inner;
-    if (settings.brightness)
-        inner += QStringLiteral("<tt:Brightness>%1</tt:Brightness>").arg(*settings.brightness);
-    if (settings.colorSaturation)
-        inner += QStringLiteral("<tt:ColorSaturation>%1</tt:ColorSaturation>").arg(*settings.colorSaturation);
-    if (settings.contrast)
-        inner += QStringLiteral("<tt:Contrast>%1</tt:Contrast>").arg(*settings.contrast);
-    if (settings.sharpness)
-        inner += QStringLiteral("<tt:Sharpness>%1</tt:Sharpness>").arg(*settings.sharpness);
-    if (!settings.irCutFilter.isEmpty())
-        inner += QStringLiteral("<tt:IrCutFilter>%1</tt:IrCutFilter>").arg(settings.irCutFilter);
     if (settings.backlightCompLevel) {
         inner += QStringLiteral(
                      "<tt:BacklightCompensation>"
@@ -181,8 +193,18 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
                      "<tt:Level>%2</tt:Level>"
                      "</tt:BacklightCompensation>")
                      .arg(settings.backlightCompEnabled ? QStringLiteral("ON") : QStringLiteral("OFF"))
-                     .arg(*settings.backlightCompLevel);
+                     .arg(*settings.backlightCompLevel, 0, 'f', 1);
     }
+    if (settings.brightness)
+        inner += QStringLiteral("<tt:Brightness>%1</tt:Brightness>").arg(*settings.brightness, 0, 'f', 1);
+    if (settings.colorSaturation)
+        inner += QStringLiteral("<tt:ColorSaturation>%1</tt:ColorSaturation>").arg(*settings.colorSaturation, 0, 'f', 1);
+    if (settings.contrast)
+        inner += QStringLiteral("<tt:Contrast>%1</tt:Contrast>").arg(*settings.contrast, 0, 'f', 1);
+    if (!settings.irCutFilter.isEmpty())
+        inner += QStringLiteral("<tt:IrCutFilter>%1</tt:IrCutFilter>").arg(settings.irCutFilter);
+    if (settings.sharpness)
+        inner += QStringLiteral("<tt:Sharpness>%1</tt:Sharpness>").arg(*settings.sharpness, 0, 'f', 1);
     if (settings.wdrLevel) {
         inner += QStringLiteral(
                      "<tt:WideDynamicRange>"
@@ -190,7 +212,7 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
                      "<tt:Level>%2</tt:Level>"
                      "</tt:WideDynamicRange>")
                      .arg(settings.wdrEnabled ? QStringLiteral("ON") : QStringLiteral("OFF"))
-                     .arg(*settings.wdrLevel);
+                     .arg(*settings.wdrLevel, 0, 'f', 1);
     }
 
     QString body = QStringLiteral(
@@ -201,7 +223,15 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
                        .arg(token.toHtmlEscaped(), inner);
 
     QByteArray soap = wrapSoap(body, user, pass);
-    postSoap(QUrl(imagingXAddr), soap, [this](const QByteArray &) {
+    postSoap(QUrl(imagingXAddr), soap, QByteArrayLiteral("http://www.onvif.org/ver20/imaging/wsdl/SetImagingSettings"), [this](const QByteArray &data) {
+        emit soapLog(QStringLiteral("Set response (%1 B): %2").arg(data.size()).arg(QString::fromUtf8(data.left(500))));
+        if (!data.contains("SetImagingSettingsResponse")) {
+            emit queryFailed(
+                QStringLiteral("Camera did not return SetImagingSettingsResponse — "
+                               "possible authentication/permission failure. "
+                               "Check credentials and user role on the camera."));
+            return;
+        }
         emit imagingSettingsApplied();
     });
 }
@@ -212,17 +242,32 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
 QString OnvifClient::parseSoapFault(const QByteArray &data)
 {
     QXmlStreamReader xml(data);
+    bool inFault = false;
+    QString reasonText; // from <Reason><Text>…</Text></Reason> or <faultstring>
+    QString codeValue; // from <Code><Value>…</Value></Code>
+
     while (!xml.atEnd()) {
         xml.readNext();
-        if (xml.isStartElement() && xml.name() == QLatin1String("Fault")) {
-            while (!xml.atEnd()) {
-                xml.readNext();
-                if (xml.isStartElement() && xml.name() == QLatin1String("Text"))
-                    return xml.readElementText();
+        if (xml.isStartElement()) {
+            QString name = xml.name().toString();
+            if (name == QLatin1String("Fault"))
+                inFault = true;
+            else if (inFault) {
+                if (name == QLatin1String("Text") || name == QLatin1String("faultstring"))
+                    reasonText = xml.readElementText();
+                else if (name == QLatin1String("Value") && codeValue.isEmpty())
+                    codeValue = xml.readElementText();
             }
-            return QStringLiteral("SOAP Fault");
         }
     }
+
+    // Prefer human-readable reason over raw code
+    if (!reasonText.isEmpty())
+        return codeValue.isEmpty() ? reasonText : QStringLiteral("%1 (%2)").arg(reasonText, codeValue);
+    if (!codeValue.isEmpty())
+        return codeValue;
+    if (inFault)
+        return QStringLiteral("SOAP Fault (no detail)");
     return {};
 }
 

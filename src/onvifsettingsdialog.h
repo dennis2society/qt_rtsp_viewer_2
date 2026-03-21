@@ -41,10 +41,12 @@ private:
     // Connection state
     OnvifCapabilities m_caps;
     OnvifImagingSettings m_currentSettings;
+    OnvifImagingSettings m_pendingApply; // what we last sent
     OnvifImagingOptions m_options;
     QString m_videoSourceToken;
     bool m_gotSettings = false;
     bool m_gotOptions = false;
+    bool m_applyRefreshPending = false;
 
     // Connection widgets
     QLineEdit *m_hostEdit = nullptr;
@@ -88,4 +90,7 @@ private:
     QPushButton *m_applyBtn = nullptr;
     QPushButton *m_refreshBtn = nullptr;
     QPushButton *m_closeBtn = nullptr;
+
+    // Log area
+    class QTextEdit *m_logEdit = nullptr;
 };

@@ -117,51 +117,22 @@ If FFmpeg is not found at configuration time, the build will complete without re
 - If no global output folder is set, a dialog appears to choose file, codec, and FPS
 - Otherwise, recording starts automatically to `{OutputFolder}/{timestamp}_{cameraName}_recording.{ext}`
 
-**Auto-Record on Motion:**
-1. Enable **"Enable auto-record"** in the sidebar
-2. Adjust the **"Motion Threshold"** slider (0–100 %)
-3. Set the **"Stop after"** timeout (seconds)
-4. When motion exceeds the threshold, recording starts automatically
-5. Recording stops after the timeout period with no motion
-
-### Selecting Effects
-- Use the **Effects Sidebar** (right panel) to enable/adjust:
-  - Blur, Grayscale, Brightness, Contrast, Colour Temperature
-  - Motion Detection, Motion Vectors, Motion Graph, Face Detection
-  - FPS/Resolution Overlay
-- Each stream maintains independent effect settings
-- Click **"Reset Effects"** to restore defaults for the current stream
+**Experimental Auto-Record on Motion:**
+This will probably happen when enabling the auto-recording option and
+dialing in to a suitable sensitivity. Good luck...
 
 ### Setting Output Folder
 1. Click **"Select Folder…"** in the sidebar's Global Output Folder section
 2. Choose a directory (created if it does not exist)
 3. Recording filenames are auto-generated in this folder
 
-### Managing URL History
-- URLs are automatically saved to history when you click **Play**
-- Remove an entry: Select it and click **Remove**
-- History persists across application restarts (max 20 entries)
-
-### Closing a Stream Tab
-- Click the **X** on any tab to close it (at least 1 tab must remain)
-- Playback and recording stop automatically
-
 ## Performance Considerations
-
-- **Frame processing** happens entirely on per-stream worker threads, not blocking the UI
-- **Motion detection** uses grid-based (6×4) analysis for efficiency
-- **Motion vectors** downscaled to 10% for optical flow performance
-- **Face detection** uses Haar cascades at 50% resolution
-- Reusable OpenCV `cv::Mat` buffers reduce allocation overhead
+Most image processing options have a GPU(OpenCL) and a fallback CPU 
+implementation. For speed!
 
 ## Configuration
 
-Settings are stored in `~/.config/QtRtspViewer/QtRtspViewer.conf` (Linux) or the system equivalent:
-- **OutputFolder** — global output directory for recordings
-- **LastPlayedUrl** — auto-play URL on startup
-- **UrlHistory** — list of recent RTSP URLs and their camera names
-
-Per-stream settings (effects, codec, threshold) are managed by `StreamStateManager` and can be extended.
+Settings are stored in `~/.config/QtRtspViewer/QtRtspViewer.conf` (Linux) or the system equivalent
 
 ## Known Limitations
 
@@ -186,4 +157,4 @@ Per-stream settings (effects, codec, threshold) are managed by `StreamStateManag
 
 ## License
 
-GPLv2 (same as original project)
+GPLv2 (or whatever applies with AI generated code)

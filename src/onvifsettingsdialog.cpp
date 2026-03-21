@@ -14,6 +14,8 @@
 #include <QSettings>
 #include <QSlider>
 #include <QSpinBox>
+#include <QTextEdit>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -156,6 +158,19 @@ void OnvifSettingsDialog::setupUI()
     btnLay->addWidget(m_applyBtn);
     btnLay->addWidget(m_closeBtn);
     mainLay->addLayout(btnLay);
+
+    // ── Log area ───────────────────────────────────────────────────
+    auto *logGroup = new QGroupBox(QStringLiteral("SOAP Log"));
+    logGroup->setCheckable(true);
+    logGroup->setChecked(false);
+    auto *logLay = new QVBoxLayout(logGroup);
+    m_logEdit = new QTextEdit;
+    m_logEdit->setReadOnly(true);
+    m_logEdit->setFont(QFont(QStringLiteral("Monospace"), 8));
+    m_logEdit->setVisible(false);
+    logLay->addWidget(m_logEdit);
+    connect(logGroup, &QGroupBox::toggled, m_logEdit, &QTextEdit::setVisible);
+    mainLay->addWidget(logGroup, 1);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -165,6 +180,11 @@ void OnvifSettingsDialog::connectSignals()
     connect(m_applyBtn, &QPushButton::clicked, this, &OnvifSettingsDialog::onApply);
     connect(m_refreshBtn, &QPushButton::clicked, this, &OnvifSettingsDialog::onRefresh);
     connect(m_closeBtn, &QPushButton::clicked, this, &QDialog::accept);
+
+    // ONVIF SOAP log
+    connect(m_client, &OnvifClient::soapLog, this, [this](const QString &entry) {
+        m_logEdit->append(entry);
+    });
 
     // ONVIF client signals
     connect(m_client, &OnvifClient::capabilitiesReady, this, [this](const OnvifCapabilities &caps) {
@@ -216,8 +236,46 @@ void OnvifSettingsDialog::connectSignals()
     connect(m_client, &OnvifClient::imagingSettingsReady, this, [this](const OnvifImagingSettings &s) {
         m_currentSettings = s;
         m_gotSettings = true;
-        if (m_gotOptions)
+
+        if (m_applyRefreshPending) {
+            // Post-apply verification: compare sent values with camera values
+            m_applyRefreshPending = false;
+
+            QStringList diffs;
+            bool anyMismatch = false;
+            auto cmp = [&](const QString &name, const std::optional<double> &sent, const std::optional<double> &got) {
+                if (!sent)
+                    return;
+                double sv = *sent;
+                QString gotStr = got ? QString::number(*got, 'f', 1) : QStringLiteral("n/a");
+                double delta = got ? std::abs(sv - *got) : 9999;
+                bool ok = got.has_value() && delta <= 1.5;
+                diffs << QStringLiteral("%1: %2\u2192%3%4").arg(name).arg(sv, 0, 'f', 1).arg(gotStr, ok ? QString() : QStringLiteral(" \u2717"));
+                if (!ok)
+                    anyMismatch = true;
+            };
+            cmp(QStringLiteral("Brightness"), m_pendingApply.brightness, s.brightness);
+            cmp(QStringLiteral("Contrast"), m_pendingApply.contrast, s.contrast);
+            cmp(QStringLiteral("Saturation"), m_pendingApply.colorSaturation, s.colorSaturation);
+            cmp(QStringLiteral("Sharpness"), m_pendingApply.sharpness, s.sharpness);
+
+            QString verifyLine = diffs.join(QStringLiteral("  |  "));
+            m_logEdit->append(QStringLiteral("Verify: %1").arg(verifyLine));
+
+            // Always update sliders to what the camera actually reports
             populateImagingUI();
+
+            // Override the status from populateImagingUI
+            if (anyMismatch) {
+                m_statusLabel->setText(verifyLine);
+                m_statusLabel->setStyleSheet(QStringLiteral("color:orange;"));
+            } else {
+                m_statusLabel->setText(QStringLiteral("Settings applied \u2713  ") + verifyLine);
+                m_statusLabel->setStyleSheet(QStringLiteral("color:green;"));
+            }
+        } else if (m_gotOptions) {
+            populateImagingUI();
+        }
     });
 
     connect(m_client, &OnvifClient::imagingOptionsReady, this, [this](const OnvifImagingOptions &o) {
@@ -228,18 +286,27 @@ void OnvifSettingsDialog::connectSignals()
     });
 
     connect(m_client, &OnvifClient::imagingSettingsApplied, this, [this]() {
-        m_statusLabel->setText(QStringLiteral("Settings applied ✓"));
-        m_statusLabel->setStyleSheet(QStringLiteral("color:green;"));
-        m_applyBtn->setEnabled(true);
-        m_refreshBtn->setEnabled(true);
+        m_statusLabel->setText(QStringLiteral("Set request accepted — verifying\u2026"));
+        m_statusLabel->setStyleSheet(QStringLiteral("color:gray;"));
+        m_logEdit->append(QStringLiteral("\u2713 SetImagingSettings response received OK"));
+        // Re-read settings from camera to verify — wait 500 ms for the
+        // camera to actually commit the values before reading back.
+        m_applyRefreshPending = true;
+        m_gotSettings = false;
+        QTimer::singleShot(500, this, [this]() {
+            m_client->fetchImagingSettings(m_caps.imagingXAddr, m_videoSourceToken, m_userEdit->text(), m_passEdit->text());
+        });
     });
 
     connect(m_client, &OnvifClient::queryFailed, this, [this](const QString &err) {
         m_statusLabel->setText(QStringLiteral("Error: %1").arg(err));
         m_statusLabel->setStyleSheet(QStringLiteral("color:red;"));
+        m_logEdit->append(QStringLiteral("\u2717 Error: %1").arg(err));
         m_connectBtn->setEnabled(true);
         m_applyBtn->setEnabled(m_gotSettings && m_gotOptions);
         m_refreshBtn->setEnabled(m_gotSettings && m_gotOptions);
+        m_applyRefreshPending = false;
+        QMessageBox::warning(this, QStringLiteral("ONVIF Error"), err);
     });
 }
 
@@ -275,6 +342,21 @@ void OnvifSettingsDialog::onApply()
     m_statusLabel->setStyleSheet(QStringLiteral("color:gray;"));
 
     OnvifImagingSettings s = gatherSettings();
+    m_pendingApply = s;
+
+    // Log what we're sending
+    QStringList vals;
+    if (s.brightness)
+        vals << QStringLiteral("Brightness=%1").arg(*s.brightness, 0, 'f', 1);
+    if (s.contrast)
+        vals << QStringLiteral("Contrast=%1").arg(*s.contrast, 0, 'f', 1);
+    if (s.colorSaturation)
+        vals << QStringLiteral("Saturation=%1").arg(*s.colorSaturation, 0, 'f', 1);
+    if (s.sharpness)
+        vals << QStringLiteral("Sharpness=%1").arg(*s.sharpness, 0, 'f', 1);
+    if (!s.irCutFilter.isEmpty())
+        vals << QStringLiteral("IRCut=%1").arg(s.irCutFilter);
+    m_logEdit->append(QStringLiteral("\u25b6 SetImagingSettings: %1").arg(vals.join(QStringLiteral(", "))));
     m_client->applyImagingSettings(m_caps.imagingXAddr, m_videoSourceToken, s, m_userEdit->text(), m_passEdit->text());
 }
 

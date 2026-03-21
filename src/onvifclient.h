@@ -84,11 +84,12 @@ signals:
     void imagingOptionsReady(const OnvifImagingOptions &options);
     void imagingSettingsApplied();
     void queryFailed(const QString &errorMessage);
+    void soapLog(const QString &entry);
 
 private:
     QByteArray buildSecurityHeader(const QString &user, const QString &pass) const;
     QByteArray wrapSoap(const QString &body, const QString &user, const QString &pass) const;
-    void postSoap(const QUrl &url, const QByteArray &soap, std::function<void(const QByteArray &)> onSuccess);
+    void postSoap(const QUrl &url, const QByteArray &soap, const QByteArray &soapAction, std::function<void(const QByteArray &)> onSuccess);
 
     static OnvifCapabilities parseCapabilities(const QByteArray &data);
     static QStringList parseVideoSources(const QByteArray &data);
