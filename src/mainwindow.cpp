@@ -21,6 +21,7 @@ MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
     setWindowTitle(QStringLiteral("RTSP Stream Viewer"));
+    setMinimumSize(800, 480);
     resize(1200, 720);
 
     // ── Central widget ──────────────────────────────────────────────

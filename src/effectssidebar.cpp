@@ -287,7 +287,10 @@ void EffectsSidebar::connectSlots()
 
     // Global output folder
     connect(m_outputFolderBtn, &QPushButton::clicked, this, [this]() {
-        QString dir = QFileDialog::getExistingDirectory(this, QStringLiteral("Select Output Folder"), StreamStateManager::instance().outputFolder());
+        QString dir = QFileDialog::getExistingDirectory(window(),
+                                                        QStringLiteral("Select Output Folder"),
+                                                        StreamStateManager::instance().outputFolder(),
+                                                        QFileDialog::ShowDirsOnly);
         if (dir.isEmpty())
             return;
         StreamStateManager::instance().setOutputFolder(dir);
