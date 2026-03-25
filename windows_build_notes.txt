@@ -1,0 +1,10 @@
+# OpenCV Build:
+- enable opencv_world build
+- deactivate "Eigen" and "gapi"
+
+# qt_rtsp_viewer_2 build:
+# to satisfy prefix paths and build type
+cmake -B build -D CMAKE_PREFIX_PATH="C:\Qt\6.10.2\msvc2022_64\lib\cmake\Qt6" -D CMAKE_PREFIX_PATH="D:\devel\dev\opencv_4_12_exe_install\opencv\build"
+
+# to build (force Release on Windows)
+cmake --build build --config Release

@@ -94,20 +94,32 @@ void VideoPlayer::startWorker()
 
 void VideoPlayer::stopWorker()
 {
+    // ── Disconnect frame delivery first ──────────────────────────────
+    // The multimedia thread delivers frames via DirectConnection to the
+    // worker.  We must sever that link before tearing down threads,
+    // otherwise the multimedia thread can call into a dying worker.
+    if (m_worker)
+        disconnect(m_captureSink, &QVideoSink::videoFrameChanged,
+                   m_worker, &VideoWorker::submitFrame);
+
     // ── Stop recorder thread first (may need to flush) ───────────────
     if (m_recorderThread) {
-        if (m_recorder)
+        if (m_recorder) {
+            disconnect(m_recorder, nullptr, nullptr, nullptr);
             m_recorder->requestInterrupt();
+        }
         m_recorderThread->quit();
-        m_recorderThread->wait(3000); // max 3 seconds to drain
+        m_recorderThread->wait(5000);
         m_recorderThread = nullptr;
         m_recorder = nullptr;
     }
 
     // ── Then stop the video worker ───────────────────────────────────
     if (m_workerThread) {
+        if (m_worker)
+            disconnect(m_worker, nullptr, nullptr, nullptr);
         m_workerThread->quit();
-        m_workerThread->wait(2000);
+        m_workerThread->wait(5000);
         m_workerThread = nullptr;
         m_worker = nullptr;
     }
@@ -118,11 +130,11 @@ void VideoPlayer::stopWorker()
 // ─────────────────────────────────────────────────────────────────────────────
 void VideoPlayer::play(const QString &url)
 {
-    // Ensure worker threads are running
+    // Ensure worker threads are running (no-op if already alive)
     startWorker();
 
     if (m_worker)
-        QMetaObject::invokeMethod(m_worker, "resetStream", Qt::BlockingQueuedConnection);
+        QMetaObject::invokeMethod(m_worker, "resetStream", Qt::QueuedConnection);
 
     m_player->setSource(QUrl(url));
     m_player->play();
@@ -138,14 +150,15 @@ void VideoPlayer::play(const QString &url)
 
 void VideoPlayer::stop()
 {
+    // Deactivate the worker first (stops processing timer)
     if (m_worker)
         QMetaObject::invokeMethod(m_worker, "setStreamActive", Qt::QueuedConnection, Q_ARG(bool, false));
 
     m_player->stop();
     m_player->setSource(QUrl());
 
-    // Tear down worker threads so they consume zero CPU when idle
-    stopWorker();
+    // Don't tear down worker threads — they are reused on the next play().
+    // A deactivated worker with a stopped QTimer consumes zero CPU.
 
     StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
         s.playbackState = PlaybackState::Stopped;
