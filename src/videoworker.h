@@ -73,8 +73,7 @@ private:
     double m_fps = 0.0;
     QDateTime m_fpsTimer;
 
-    // Clean-frame bookkeeping (for detection algorithms)
-    cv::Mat m_cleanPreviousGray;
+    // Clean-frame bookkeeping is now managed by OpenCVProcessor
 
     // Timer that drives frame processing — started/stopped with stream activity
     QTimer *m_processTimer = nullptr;

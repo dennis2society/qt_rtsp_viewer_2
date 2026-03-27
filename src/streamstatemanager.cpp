@@ -239,6 +239,7 @@ void StreamStateManager::loadSettings()
         e.motionDetectionEnabled = m_settings.value(QStringLiteral("motionDetectionEnabled"), false).toBool();
         e.motionSensitivity = m_settings.value(QStringLiteral("motionSensitivity"), 20).toInt();
         e.motionVectorsEnabled = m_settings.value(QStringLiteral("motionVectorsEnabled"), false).toBool();
+        e.motionVectorsSensitivity = m_settings.value(QStringLiteral("motionVectorsSensitivity"), 50).toInt();
         e.motionTracesEnabled = m_settings.value(QStringLiteral("motionTracesEnabled"), false).toBool();
         e.motionTraceDecay = m_settings.value(QStringLiteral("motionTraceDecay"), 50).toInt();
         e.motionGraphEnabled = m_settings.value(QStringLiteral("motionGraphEnabled"), false).toBool();
@@ -288,6 +289,7 @@ void StreamStateManager::saveSettings()
         m_settings.setValue(QStringLiteral("motionDetectionEnabled"), m_openTabs[i].motionDetectionEnabled);
         m_settings.setValue(QStringLiteral("motionSensitivity"), m_openTabs[i].motionSensitivity);
         m_settings.setValue(QStringLiteral("motionVectorsEnabled"), m_openTabs[i].motionVectorsEnabled);
+        m_settings.setValue(QStringLiteral("motionVectorsSensitivity"), m_openTabs[i].motionVectorsSensitivity);
         m_settings.setValue(QStringLiteral("motionTracesEnabled"), m_openTabs[i].motionTracesEnabled);
         m_settings.setValue(QStringLiteral("motionTraceDecay"), m_openTabs[i].motionTraceDecay);
         m_settings.setValue(QStringLiteral("motionGraphEnabled"), m_openTabs[i].motionGraphEnabled);

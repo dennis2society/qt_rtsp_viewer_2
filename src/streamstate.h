@@ -38,6 +38,7 @@ struct StreamState {
     int motionSensitivity = 20; // 1 … 100
 
     bool motionVectorsEnabled = false;
+    int motionVectorsSensitivity = 50; // 1 … 100
     bool motionTracesEnabled = false;
     int motionTraceDecay = 50; // 1 … 100  (maps to 0.80 … 0.99)
 

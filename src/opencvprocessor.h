@@ -36,13 +36,28 @@ public:
         return m_haveOpenCL;
     }
 
-    // ── spike detection ─────────────────────────────────────────────
-    bool isSpikeFrame(const cv::Mat &grayCur, const cv::Mat &grayPrev);
+    // ── spike detection / reference frame ───────────────────────
+    /// Push the current gray frame into the history buffer.
+    /// Returns true if the frame is usable (not a spike).
+    /// After calling, use referenceGray() to get the best comparison frame.
+    bool pushGrayFrame(const cv::Mat &grayCur);
+    /// The best stable reference frame from recent history.
+    /// Empty until at least 2 non-spike frames have been pushed.
+    const cv::Mat &referenceGray() const
+    {
+        return m_referenceGray;
+    }
     double decayMotionLevels();
 
     // ── detection overlays (paint directly on QImage) ───────────────
-    void applyMotionDetectionOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, int sensitivity);
-    void applyMotionVectorsOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, bool showTraces = false, int traceDecay = 50);
+    void
+    applyMotionDetectionOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, int sensitivity, bool showTraces = false, int traceDecay = 50);
+    void applyMotionVectorsOverlay(QImage &image,
+                                   const cv::Mat &grayCur,
+                                   const cv::Mat &grayPrev,
+                                   int sensitivity = 50,
+                                   bool showTraces = false,
+                                   int traceDecay = 50);
     void applyFaceDetection(QImage &image, const cv::Mat &bgrClean);
 
     // ── motion analysis ─────────────────────────────────────────────
@@ -70,10 +85,18 @@ private:
     // per-cell history for the stacked bar chart
     std::vector<std::deque<double>> m_cellHistory;
 
-    // Codec-artifact (I-frame) spike rejection
+    // Codec-artifact (I-frame) spike rejection — frame history
+    struct FrameRecord {
+        cv::Mat gray;
+        double diff = 0.0; // diff vs. previous record
+        bool spike = false;
+    };
+    std::deque<FrameRecord> m_frameHistory;
+    static constexpr int kFrameHistoryLen = 5;
+    cv::Mat m_referenceGray; // best stable reference
     double m_globalDiffEma = -1.0;
     static constexpr double kGlobalDiffEmaAlpha = 0.15;
-    static constexpr double kSpikeMultiplier = 4.0;
+    static constexpr double kSpikeMultiplier = 3.5;
 
     // OpenCL availability (checked once at construction)
     bool m_haveOpenCL = false;
@@ -83,6 +106,7 @@ private:
         QPointF pos;
         double opacity;
     };
-    std::deque<TracePoint> m_motionTraces;
+    std::deque<TracePoint> m_motionTraces; // for motion vectors
+    std::deque<TracePoint> m_detectionTraces; // for motion detection
     static constexpr int kMaxTracePoints = 200;
 };

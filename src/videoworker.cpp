@@ -51,7 +51,6 @@ void VideoWorker::setRecording(bool on)
 }
 void VideoWorker::resetStream()
 {
-    m_cleanPreviousGray = cv::Mat{};
     m_processor->reset();
 }
 
@@ -170,26 +169,30 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
     // 6. Convert BGR → QImage (once)
     QImage image = m_processor->bgrToQImage(bgr);
 
-    // 7. Spike detection (once for all motion functions)
+    // 7. Spike detection via frame history
     bool isSpike = false;
     double motionLevel = 0.0;
-    if (needsMotion && !m_cleanPreviousGray.empty())
-        isSpike = m_processor->isSpikeFrame(cleanGray, m_cleanPreviousGray);
+    if (needsMotion) {
+        bool usable = m_processor->pushGrayFrame(cleanGray);
+        isSpike = !usable;
+    }
 
-    if (isSpike) {
+    const cv::Mat &refGray = m_processor->referenceGray();
+
+    if (isSpike || refGray.empty()) {
         motionLevel = m_processor->decayMotionLevels();
     } else {
         // 8. Motion detection overlay
-        if (st.motionDetectionEnabled && !m_cleanPreviousGray.empty())
-            m_processor->applyMotionDetectionOverlay(image, cleanGray, m_cleanPreviousGray, st.motionSensitivity);
+        if (st.motionDetectionEnabled)
+            m_processor->applyMotionDetectionOverlay(image, cleanGray, refGray, st.motionSensitivity, st.motionTracesEnabled, st.motionTraceDecay);
 
         // 9. Motion vectors overlay
-        if (st.motionVectorsEnabled && !m_cleanPreviousGray.empty())
-            m_processor->applyMotionVectorsOverlay(image, cleanGray, m_cleanPreviousGray, st.motionTracesEnabled, st.motionTraceDecay);
+        if (st.motionVectorsEnabled)
+            m_processor->applyMotionVectorsOverlay(image, cleanGray, refGray, st.motionVectorsSensitivity, st.motionTracesEnabled, st.motionTraceDecay);
 
         // 10. Motion level (for graph + auto-record)
-        if ((st.motionGraphEnabled || st.autoRecordEnabled) && !m_cleanPreviousGray.empty())
-            motionLevel = m_processor->computeMotionLevel(cleanGray, m_cleanPreviousGray, st.motionGraphSensitivity);
+        if (st.motionGraphEnabled || st.autoRecordEnabled)
+            motionLevel = m_processor->computeMotionLevel(cleanGray, refGray, st.motionGraphSensitivity);
     }
 
     // 11. Face detection (independent of motion spike)
@@ -204,9 +207,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
     if (st.motionGraphEnabled)
         m_processor->applyMotionGraphOverlay(image, motionLevel);
 
-    // 14. Save clean gray for next iteration
-    if (needsMotion)
-        m_cleanPreviousGray = cleanGray;
+    // 14. (Reference frame managed by OpenCVProcessor::pushGrayFrame)
 
     // 15. FPS / resolution / datetime overlay
     if (st.overlayEnabled)

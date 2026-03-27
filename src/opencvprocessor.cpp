@@ -26,11 +26,14 @@ OpenCVProcessor::OpenCVProcessor()
 void OpenCVProcessor::reset()
 {
     m_globalDiffEma = -1.0;
+    m_frameHistory.clear();
+    m_referenceGray = cv::Mat{};
     std::fill(m_cellLevels.begin(), m_cellLevels.end(), 0.0);
     for (auto &dq : m_cellHistory)
         std::fill(dq.begin(), dq.end(), 0.0);
     m_graphHistory.clear();
     m_motionTraces.clear();
+    m_detectionTraces.clear();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -160,28 +163,82 @@ void OpenCVProcessor::applyColorTemperature(cv::UMat &bgr, int temperature)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Codec-artifact spike detector
+// Spike detection with frame-history reference selection
 // ─────────────────────────────────────────────────────────────────────────────
-bool OpenCVProcessor::isSpikeFrame(const cv::Mat &grayCur, const cv::Mat &grayPrev)
+bool OpenCVProcessor::pushGrayFrame(const cv::Mat &grayCur)
 {
-    if (grayCur.size() != grayPrev.size())
-        return true;
+    FrameRecord rec;
+    // Light blur to suppress compression noise before any motion analysis
+    cv::GaussianBlur(grayCur, rec.gray, cv::Size(5, 5), 1.0);
 
-    cv::Mat diff;
-    cv::absdiff(grayCur, grayPrev, diff);
-    double globalDiff = cv::mean(diff)[0] / 255.0;
+    // Compute diff against the most recent frame in history
+    if (!m_frameHistory.empty()) {
+        const cv::Mat &prev = m_frameHistory.back().gray;
+        if (grayCur.size() != prev.size()) {
+            // Resolution change — reset history
+            m_frameHistory.clear();
+            m_globalDiffEma = -1.0;
+            m_referenceGray = cv::Mat{};
+            rec.diff = 0.0;
+            rec.spike = false;
+            m_frameHistory.push_back(std::move(rec));
+            return false;
+        }
 
-    if (m_globalDiffEma < 0.0) {
-        m_globalDiffEma = globalDiff;
-        return false;
+        cv::Mat diff;
+        cv::absdiff(grayCur, prev, diff);
+        double globalDiff = cv::mean(diff)[0] / 255.0;
+        rec.diff = globalDiff;
+
+        if (m_globalDiffEma < 0.0) {
+            m_globalDiffEma = globalDiff;
+        }
+
+        // A frame is a spike if its diff is much larger than the running average
+        rec.spike = (globalDiff > kSpikeMultiplier * m_globalDiffEma) && (m_globalDiffEma > 0.002);
+
+        // Also check against the median diff of recent history for extra robustness:
+        // if this frame's diff is > 3× the median of non-spike history diffs, flag it
+        if (!rec.spike && m_frameHistory.size() >= 3) {
+            std::vector<double> recentDiffs;
+            for (const auto &fr : m_frameHistory)
+                if (!fr.spike)
+                    recentDiffs.push_back(fr.diff);
+            if (recentDiffs.size() >= 2) {
+                std::sort(recentDiffs.begin(), recentDiffs.end());
+                double median = recentDiffs[recentDiffs.size() / 2];
+                if (median > 0.001 && globalDiff > kSpikeMultiplier * median)
+                    rec.spike = true;
+            }
+        }
+
+        // Only update the EMA with non-spike diffs
+        if (!rec.spike)
+            m_globalDiffEma = kGlobalDiffEmaAlpha * globalDiff + (1.0 - kGlobalDiffEmaAlpha) * m_globalDiffEma;
+    } else {
+        rec.diff = 0.0;
+        rec.spike = false;
     }
 
-    bool spike = (globalDiff > kSpikeMultiplier * m_globalDiffEma) && (m_globalDiffEma > 0.002);
+    m_frameHistory.push_back(std::move(rec));
+    while (static_cast<int>(m_frameHistory.size()) > kFrameHistoryLen)
+        m_frameHistory.pop_front();
 
-    if (!spike)
-        m_globalDiffEma = kGlobalDiffEmaAlpha * globalDiff + (1.0 - kGlobalDiffEmaAlpha) * m_globalDiffEma;
+    // Select the best reference frame: the most recent non-spike frame
+    // that is at least 1 frame old (so we compare against a stable frame)
+    m_referenceGray = cv::Mat{};
+    for (int i = static_cast<int>(m_frameHistory.size()) - 2; i >= 0; --i) {
+        if (!m_frameHistory[static_cast<size_t>(i)].spike) {
+            m_referenceGray = m_frameHistory[static_cast<size_t>(i)].gray;
+            break;
+        }
+    }
 
-    return spike;
+    // If all history frames are spikes, fall back to the oldest frame
+    if (m_referenceGray.empty() && m_frameHistory.size() >= 2)
+        m_referenceGray = m_frameHistory.front().gray;
+
+    return !m_frameHistory.back().spike;
 }
 
 double OpenCVProcessor::decayMotionLevels()
@@ -197,9 +254,14 @@ double OpenCVProcessor::decayMotionLevels()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Motion detection overlay (contour-based)
+// Motion detection overlay (contour-based, clustered bounding boxes)
 // ─────────────────────────────────────────────────────────────────────────────
-void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, int sensitivity)
+void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
+                                                  const cv::Mat &grayCur,
+                                                  const cv::Mat &grayPrev,
+                                                  int sensitivity,
+                                                  bool showTraces,
+                                                  int traceDecay)
 {
     int thresh = std::max(1, 100 - sensitivity);
 
@@ -215,25 +277,115 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image, const cv::Mat &
         cv::threshold(m_work2, m_work3, thresh, 255, cv::THRESH_BINARY);
     }
 
+    // Morphological cleanup: dilate to bridge nearby regions, then erode to remove specks
+    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
+    cv::dilate(m_work3, m_work3, kernel, cv::Point(-1, -1), 1);
+    cv::erode(m_work3, m_work3, kernel, cv::Point(-1, -1), 1);
+
     std::vector<std::vector<cv::Point>> contours;
     cv::findContours(m_work3, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
 
-    QPainter p(&image);
-    p.setPen(QPen(Qt::red, 2));
+    // Collect significant bounding boxes
+    std::vector<cv::Rect> boxes;
     for (const auto &c : contours) {
-        double area = cv::contourArea(c);
-        if (area > 500) {
-            cv::Rect r = cv::boundingRect(c);
-            p.drawRect(r.x, r.y, r.width, r.height);
+        if (cv::contourArea(c) > 1000)
+            boxes.push_back(cv::boundingRect(c));
+    }
+
+    // Cluster nearby boxes by merging overlapping/touching rectangles
+    // Expand each box slightly for proximity merging, then iteratively merge
+    if (!boxes.empty()) {
+        constexpr int kMergeMargin = 30; // pixels
+        bool merged = true;
+        while (merged) {
+            merged = false;
+            for (size_t i = 0; i < boxes.size(); ++i) {
+                cv::Rect expanded_i(boxes[i].x - kMergeMargin,
+                                    boxes[i].y - kMergeMargin,
+                                    boxes[i].width + 2 * kMergeMargin,
+                                    boxes[i].height + 2 * kMergeMargin);
+                for (size_t j = i + 1; j < boxes.size();) {
+                    cv::Rect expanded_j(boxes[j].x - kMergeMargin,
+                                        boxes[j].y - kMergeMargin,
+                                        boxes[j].width + 2 * kMergeMargin,
+                                        boxes[j].height + 2 * kMergeMargin);
+                    if ((expanded_i & expanded_j).area() > 0) {
+                        boxes[i] = boxes[i] | boxes[j]; // union
+                        boxes.erase(boxes.begin() + static_cast<long>(j));
+                        // Re-expand after merge
+                        expanded_i = cv::Rect(boxes[i].x - kMergeMargin,
+                                              boxes[i].y - kMergeMargin,
+                                              boxes[i].width + 2 * kMergeMargin,
+                                              boxes[i].height + 2 * kMergeMargin);
+                        merged = true;
+                    } else {
+                        ++j;
+                    }
+                }
+            }
         }
     }
+
+    QPainter p(&image);
+    p.setPen(QPen(Qt::red, 2));
+    for (const auto &r : boxes)
+        p.drawRect(r.x, r.y, r.width, r.height);
+
+    // Motion traces from detection centroids
+    if (showTraces && !boxes.empty()) {
+        double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
+        for (auto &t : m_detectionTraces)
+            t.opacity *= decayFactor;
+        while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
+            m_detectionTraces.pop_front();
+
+        for (const auto &r : boxes) {
+            double cx = r.x + r.width * 0.5;
+            double cy = r.y + r.height * 0.5;
+            m_detectionTraces.push_back({QPointF(cx, cy), 1.0});
+        }
+
+        while (static_cast<int>(m_detectionTraces.size()) > kMaxTracePoints)
+            m_detectionTraces.pop_front();
+
+        p.setPen(Qt::NoPen);
+        for (const auto &t : m_detectionTraces) {
+            int alpha = static_cast<int>(t.opacity * 200);
+            double radius = 3.0 + t.opacity * 5.0;
+            p.setBrush(QColor(255, 80, 80, alpha));
+            p.drawEllipse(t.pos, radius, radius);
+        }
+    } else if (showTraces) {
+        // Decay traces even when no boxes this frame
+        double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
+        for (auto &t : m_detectionTraces)
+            t.opacity *= decayFactor;
+        while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
+            m_detectionTraces.pop_front();
+
+        if (!m_detectionTraces.empty()) {
+            p.setPen(Qt::NoPen);
+            for (const auto &t : m_detectionTraces) {
+                int alpha = static_cast<int>(t.opacity * 200);
+                double radius = 3.0 + t.opacity * 5.0;
+                p.setBrush(QColor(255, 80, 80, alpha));
+                p.drawEllipse(t.pos, radius, radius);
+            }
+        }
+    }
+
     p.end();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Motion vectors overlay (optical flow)
 // ─────────────────────────────────────────────────────────────────────────────
-void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, bool showTraces, int traceDecay)
+void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image,
+                                                const cv::Mat &grayCur,
+                                                const cv::Mat &grayPrev,
+                                                int sensitivity,
+                                                bool showTraces,
+                                                int traceDecay)
 {
     cv::Mat flow;
 
@@ -273,7 +425,9 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image, const cv::Mat &gr
         for (int x = 0; x < flow.cols; x += 2) {
             const cv::Point2f &fxy = flow.at<cv::Point2f>(y, x);
             double mag = std::sqrt(fxy.x * fxy.x + fxy.y * fxy.y);
-            if (mag < 0.3)
+            // Magnitude threshold: sensitivity 1→thresh 2.0, sensitivity 100→thresh 0.2
+            double magThresh = 2.0 - (sensitivity - 1) * (1.8 / 99.0);
+            if (mag < magThresh)
                 continue;
 
             double normMag = std::min(mag / 5.0, 1.0);
@@ -411,10 +565,16 @@ double OpenCVProcessor::computeMotionLevel(const cv::Mat &grayCur, const cv::Mat
             cv::absdiff(grayCur(roi), grayPrev(roi), diff);
             double raw = cv::mean(diff)[0] / 255.0;
 
+            // Noise floor: ignore small diffs (compression artifacts)
+            if (raw < 0.008)
+                raw = 0.0;
+
             int idx = row * kGridCols + col;
             m_cellLevels[idx] = ema * m_cellLevels[idx] + (1.0 - ema) * raw;
 
-            double lv = m_cellLevels[idx] * (sensitivity / 25.0);
+            // Scale by sensitivity: 1 → 0.5×, 50 → 2.0×, 100 → 4.0×
+            double scale = 0.5 + (sensitivity - 1) * (3.5 / 99.0);
+            double lv = m_cellLevels[idx] * scale;
             lv = std::sqrt(std::min(lv, 1.0));
             maxCell = std::max(maxCell, lv);
             sumCell += lv;

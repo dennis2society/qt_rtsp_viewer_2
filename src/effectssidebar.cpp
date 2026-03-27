@@ -143,6 +143,9 @@ void EffectsSidebar::setupUI()
 
     m_motionVecCheck = new QCheckBox(QStringLiteral("Motion Vectors"));
     lay->addWidget(m_motionVecCheck);
+    lay->addWidget(new QLabel(QStringLiteral("  Vectors Sensitivity")));
+    m_motionVecSensSlider = makeSlider(1, 100, 50);
+    lay->addWidget(m_motionVecSensSlider);
 
     m_motionTraceCheck = new QCheckBox(QStringLiteral("  Motion Traces"));
     lay->addWidget(m_motionTraceCheck);
@@ -274,6 +277,7 @@ void EffectsSidebar::connectSlots()
     connect(m_motionDetCheck, &QCheckBox::toggled, this, changed);
     connect(m_motionSensSlider, &QSlider::valueChanged, this, changed);
     connect(m_motionVecCheck, &QCheckBox::toggled, this, changed);
+    connect(m_motionVecSensSlider, &QSlider::valueChanged, this, changed);
     connect(m_motionTraceCheck, &QCheckBox::toggled, this, [this, changed](bool on) {
         m_traceDecayLabel->setVisible(on);
         m_traceDecaySlider->setVisible(on);
@@ -326,6 +330,7 @@ void EffectsSidebar::connectSlots()
         m_motionDetCheck->setChecked(false);
         m_motionSensSlider->setValue(20);
         m_motionVecCheck->setChecked(false);
+        m_motionVecSensSlider->setValue(50);
         m_motionTraceCheck->setChecked(false);
         m_traceDecaySlider->setValue(50);
         m_traceDecayLabel->setText(QStringLiteral("  Trace Decay: 50"));
@@ -404,6 +409,7 @@ void EffectsSidebar::bindToStream(int streamId)
     m_motionDetCheck->setChecked(st.motionDetectionEnabled);
     m_motionSensSlider->setValue(st.motionSensitivity);
     m_motionVecCheck->setChecked(st.motionVectorsEnabled);
+    m_motionVecSensSlider->setValue(st.motionVectorsSensitivity);
     m_motionTraceCheck->setChecked(st.motionTracesEnabled);
     m_traceDecaySlider->setValue(st.motionTraceDecay);
     m_traceDecayLabel->setText(QStringLiteral("  Trace Decay: %1").arg(st.motionTraceDecay));
@@ -470,6 +476,7 @@ void EffectsSidebar::pushState()
         s.motionDetectionEnabled = m_motionDetCheck->isChecked();
         s.motionSensitivity = m_motionSensSlider->value();
         s.motionVectorsEnabled = m_motionVecCheck->isChecked();
+        s.motionVectorsSensitivity = m_motionVecSensSlider->value();
         s.motionTracesEnabled = m_motionTraceCheck->isChecked();
         s.motionTraceDecay = m_traceDecaySlider->value();
         s.motionGraphEnabled = m_motionGraphCheck->isChecked();
@@ -497,6 +504,7 @@ void EffectsSidebar::blockAllSignals(bool block)
     m_motionDetCheck->blockSignals(block);
     m_motionSensSlider->blockSignals(block);
     m_motionVecCheck->blockSignals(block);
+    m_motionVecSensSlider->blockSignals(block);
     m_motionTraceCheck->blockSignals(block);
     m_traceDecaySlider->blockSignals(block);
     m_motionGraphCheck->blockSignals(block);
