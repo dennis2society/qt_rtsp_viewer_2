@@ -52,6 +52,9 @@ private:
     QCheckBox *m_motionDetCheck = nullptr;
     QSlider *m_motionSensSlider = nullptr;
     QCheckBox *m_motionVecCheck = nullptr;
+    QCheckBox *m_motionTraceCheck = nullptr;
+    QLabel *m_traceDecayLabel = nullptr;
+    QSlider *m_traceDecaySlider = nullptr;
     QCheckBox *m_motionGraphCheck = nullptr;
     QSlider *m_motionGraphSensSlider = nullptr;
     QCheckBox *m_faceDetCheck = nullptr;

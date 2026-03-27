@@ -30,6 +30,7 @@ void OpenCVProcessor::reset()
     for (auto &dq : m_cellHistory)
         std::fill(dq.begin(), dq.end(), 0.0);
     m_graphHistory.clear();
+    m_motionTraces.clear();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -232,7 +233,7 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image, const cv::Mat &
 // ─────────────────────────────────────────────────────────────────────────────
 // Motion vectors overlay (optical flow)
 // ─────────────────────────────────────────────────────────────────────────────
-void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev)
+void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, bool showTraces, int traceDecay)
 {
     cv::Mat flow;
 
@@ -251,10 +252,22 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image, const cv::Mat &gr
         cv::calcOpticalFlowFarneback(smallPrev, smallCur, flow, 0.5, 2, 9, 2, 5, 1.1, 0);
     }
 
-    QPainter p(&image);
-    p.setRenderHint(QPainter::Antialiasing);
     const double scaleX = static_cast<double>(image.width()) / (grayCur.cols * 0.1);
     const double scaleY = static_cast<double>(image.height()) / (grayCur.rows * 0.1);
+
+    // ── Batch vectors by colour bucket for efficient drawing ────────
+    static constexpr int kBuckets = 8;
+    static const QColor bucketColors[kBuckets] = {
+        QColor(0, 0, 255),
+        QColor(36, 0, 219),
+        QColor(73, 0, 182),
+        QColor(109, 0, 146),
+        QColor(146, 0, 109),
+        QColor(182, 0, 73),
+        QColor(219, 0, 36),
+        QColor(255, 0, 0),
+    };
+    std::vector<QLineF> bucketLines[kBuckets];
 
     for (int y = 0; y < flow.rows; y += 2) {
         for (int x = 0; x < flow.cols; x += 2) {
@@ -264,27 +277,87 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image, const cv::Mat &gr
                 continue;
 
             double normMag = std::min(mag / 5.0, 1.0);
-            int r = static_cast<int>(normMag * 255);
-            int b = static_cast<int>((1.0 - normMag) * 255);
-            p.setPen(QPen(QColor(r, 0, b), 3));
+            int bucket = std::min(static_cast<int>(normMag * (kBuckets - 1)), kBuckets - 1);
 
             double px = x * scaleX;
             double py = y * scaleY;
             double ex = px + fxy.x * scaleX * 6;
             double ey = py + fxy.y * scaleY * 6;
-            p.drawLine(QPointF(px, py), QPointF(ex, ey));
+            bucketLines[bucket].emplace_back(px, py, ex, ey);
 
-            // Draw arrowhead
+            // Arrowhead
             double angle = std::atan2(ey - py, ex - px);
-            double arrowLen = 6.0;
-            double ax1 = ex - arrowLen * std::cos(angle - 0.4);
-            double ay1 = ey - arrowLen * std::sin(angle - 0.4);
-            double ax2 = ex - arrowLen * std::cos(angle + 0.4);
-            double ay2 = ey - arrowLen * std::sin(angle + 0.4);
-            p.drawLine(QPointF(ex, ey), QPointF(ax1, ay1));
-            p.drawLine(QPointF(ex, ey), QPointF(ax2, ay2));
+            constexpr double arrowLen = 6.0;
+            bucketLines[bucket].emplace_back(ex, ey, ex - arrowLen * std::cos(angle - 0.4), ey - arrowLen * std::sin(angle - 0.4));
+            bucketLines[bucket].emplace_back(ex, ey, ex - arrowLen * std::cos(angle + 0.4), ey - arrowLen * std::sin(angle + 0.4));
         }
     }
+
+    QPainter p(&image);
+    p.setRenderHint(QPainter::Antialiasing);
+    for (int b = 0; b < kBuckets; ++b) {
+        if (bucketLines[b].empty())
+            continue;
+        p.setPen(QPen(bucketColors[b], 2));
+        p.drawLines(bucketLines[b].data(), static_cast<int>(bucketLines[b].size()));
+    }
+
+    // ── Motion traces (decaying centroid trails) ────────────────────
+    if (showTraces) {
+        // Decay existing traces  (slider 1–100 → factor 0.80–0.99)
+        double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
+        for (auto &t : m_motionTraces)
+            t.opacity *= decayFactor;
+        while (!m_motionTraces.empty() && m_motionTraces.front().opacity < 0.03)
+            m_motionTraces.pop_front();
+
+        // Find high-motion centroids in a coarse grid
+        static constexpr int kTCols = 6;
+        static constexpr int kTRows = 4;
+        int cellW = flow.cols / kTCols;
+        int cellH = flow.rows / kTRows;
+        if (cellW > 0 && cellH > 0) {
+            for (int row = 0; row < kTRows; ++row) {
+                for (int col = 0; col < kTCols; ++col) {
+                    double sumMag = 0, sumX = 0, sumY = 0;
+                    int count = 0;
+                    int yEnd = std::min((row + 1) * cellH, flow.rows);
+                    int xEnd = std::min((col + 1) * cellW, flow.cols);
+                    for (int y = row * cellH; y < yEnd; ++y) {
+                        for (int x = col * cellW; x < xEnd; ++x) {
+                            const auto &f = flow.at<cv::Point2f>(y, x);
+                            double mag = std::sqrt(f.x * f.x + f.y * f.y);
+                            if (mag > 1.0) {
+                                sumMag += mag;
+                                sumX += x * mag;
+                                sumY += y * mag;
+                                ++count;
+                            }
+                        }
+                    }
+                    if (count > cellW * cellH / 10) {
+                        double cx = (sumX / sumMag) * scaleX;
+                        double cy = (sumY / sumMag) * scaleY;
+                        m_motionTraces.push_back({QPointF(cx, cy), 1.0});
+                    }
+                }
+            }
+        }
+
+        // Cap trace buffer
+        while (static_cast<int>(m_motionTraces.size()) > kMaxTracePoints)
+            m_motionTraces.pop_front();
+
+        // Draw traces as fading orange circles
+        p.setPen(Qt::NoPen);
+        for (const auto &t : m_motionTraces) {
+            int alpha = static_cast<int>(t.opacity * 200);
+            double radius = 3.0 + t.opacity * 5.0;
+            p.setBrush(QColor(255, 165, 0, alpha));
+            p.drawEllipse(t.pos, radius, radius);
+        }
+    }
+
     p.end();
 }
 

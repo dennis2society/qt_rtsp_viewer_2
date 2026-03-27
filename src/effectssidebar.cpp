@@ -144,6 +144,15 @@ void EffectsSidebar::setupUI()
     m_motionVecCheck = new QCheckBox(QStringLiteral("Motion Vectors"));
     lay->addWidget(m_motionVecCheck);
 
+    m_motionTraceCheck = new QCheckBox(QStringLiteral("  Motion Traces"));
+    lay->addWidget(m_motionTraceCheck);
+    m_traceDecayLabel = new QLabel(QStringLiteral("  Trace Decay: 50"));
+    lay->addWidget(m_traceDecayLabel);
+    m_traceDecaySlider = makeSlider(1, 100, 50);
+    lay->addWidget(m_traceDecaySlider);
+    m_traceDecayLabel->setVisible(false);
+    m_traceDecaySlider->setVisible(false);
+
     m_motionGraphCheck = new QCheckBox(QStringLiteral("Motion Graph"));
     lay->addWidget(m_motionGraphCheck);
     lay->addWidget(new QLabel(QStringLiteral("  Graph Sensitivity")));
@@ -265,6 +274,15 @@ void EffectsSidebar::connectSlots()
     connect(m_motionDetCheck, &QCheckBox::toggled, this, changed);
     connect(m_motionSensSlider, &QSlider::valueChanged, this, changed);
     connect(m_motionVecCheck, &QCheckBox::toggled, this, changed);
+    connect(m_motionTraceCheck, &QCheckBox::toggled, this, [this, changed](bool on) {
+        m_traceDecayLabel->setVisible(on);
+        m_traceDecaySlider->setVisible(on);
+        changed();
+    });
+    connect(m_traceDecaySlider, &QSlider::valueChanged, this, [this, changed](int v) {
+        m_traceDecayLabel->setText(QStringLiteral("  Trace Decay: %1").arg(v));
+        changed();
+    });
     connect(m_motionGraphCheck, &QCheckBox::toggled, this, changed);
     connect(m_motionGraphSensSlider, &QSlider::valueChanged, this, changed);
     connect(m_faceDetCheck, &QCheckBox::toggled, this, changed);
@@ -308,6 +326,11 @@ void EffectsSidebar::connectSlots()
         m_motionDetCheck->setChecked(false);
         m_motionSensSlider->setValue(20);
         m_motionVecCheck->setChecked(false);
+        m_motionTraceCheck->setChecked(false);
+        m_traceDecaySlider->setValue(50);
+        m_traceDecayLabel->setText(QStringLiteral("  Trace Decay: 50"));
+        m_traceDecayLabel->setVisible(false);
+        m_traceDecaySlider->setVisible(false);
         m_motionGraphCheck->setChecked(false);
         m_motionGraphSensSlider->setValue(50);
         m_faceDetCheck->setChecked(false);
@@ -381,6 +404,11 @@ void EffectsSidebar::bindToStream(int streamId)
     m_motionDetCheck->setChecked(st.motionDetectionEnabled);
     m_motionSensSlider->setValue(st.motionSensitivity);
     m_motionVecCheck->setChecked(st.motionVectorsEnabled);
+    m_motionTraceCheck->setChecked(st.motionTracesEnabled);
+    m_traceDecaySlider->setValue(st.motionTraceDecay);
+    m_traceDecayLabel->setText(QStringLiteral("  Trace Decay: %1").arg(st.motionTraceDecay));
+    m_traceDecayLabel->setVisible(st.motionTracesEnabled);
+    m_traceDecaySlider->setVisible(st.motionTracesEnabled);
     m_motionGraphCheck->setChecked(st.motionGraphEnabled);
     m_motionGraphSensSlider->setValue(st.motionGraphSensitivity);
     m_faceDetCheck->setChecked(st.faceDetectionEnabled);
@@ -442,6 +470,8 @@ void EffectsSidebar::pushState()
         s.motionDetectionEnabled = m_motionDetCheck->isChecked();
         s.motionSensitivity = m_motionSensSlider->value();
         s.motionVectorsEnabled = m_motionVecCheck->isChecked();
+        s.motionTracesEnabled = m_motionTraceCheck->isChecked();
+        s.motionTraceDecay = m_traceDecaySlider->value();
         s.motionGraphEnabled = m_motionGraphCheck->isChecked();
         s.motionGraphSensitivity = m_motionGraphSensSlider->value();
         s.faceDetectionEnabled = m_faceDetCheck->isChecked();
@@ -467,6 +497,8 @@ void EffectsSidebar::blockAllSignals(bool block)
     m_motionDetCheck->blockSignals(block);
     m_motionSensSlider->blockSignals(block);
     m_motionVecCheck->blockSignals(block);
+    m_motionTraceCheck->blockSignals(block);
+    m_traceDecaySlider->blockSignals(block);
     m_motionGraphCheck->blockSignals(block);
     m_motionGraphSensSlider->blockSignals(block);
     m_faceDetCheck->blockSignals(block);

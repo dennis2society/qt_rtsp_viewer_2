@@ -185,7 +185,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
         // 9. Motion vectors overlay
         if (st.motionVectorsEnabled && !m_cleanPreviousGray.empty())
-            m_processor->applyMotionVectorsOverlay(image, cleanGray, m_cleanPreviousGray);
+            m_processor->applyMotionVectorsOverlay(image, cleanGray, m_cleanPreviousGray, st.motionTracesEnabled, st.motionTraceDecay);
 
         // 10. Motion level (for graph + auto-record)
         if ((st.motionGraphEnabled || st.autoRecordEnabled) && !m_cleanPreviousGray.empty())

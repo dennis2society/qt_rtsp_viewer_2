@@ -104,6 +104,8 @@ MainWindow::MainWindow(QWidget *parent)
                     s.motionDetectionEnabled = entry.motionDetectionEnabled;
                     s.motionSensitivity = entry.motionSensitivity;
                     s.motionVectorsEnabled = entry.motionVectorsEnabled;
+                    s.motionTracesEnabled = entry.motionTracesEnabled;
+                    s.motionTraceDecay = entry.motionTraceDecay;
                     s.motionGraphEnabled = entry.motionGraphEnabled;
                     s.motionGraphSensitivity = entry.motionGraphSensitivity;
                     s.faceDetectionEnabled = entry.faceDetectionEnabled;
@@ -168,6 +170,8 @@ MainWindow::~MainWindow()
             entry.motionDetectionEnabled = st.motionDetectionEnabled;
             entry.motionSensitivity = st.motionSensitivity;
             entry.motionVectorsEnabled = st.motionVectorsEnabled;
+            entry.motionTracesEnabled = st.motionTracesEnabled;
+            entry.motionTraceDecay = st.motionTraceDecay;
             entry.motionGraphEnabled = st.motionGraphEnabled;
             entry.motionGraphSensitivity = st.motionGraphSensitivity;
             entry.faceDetectionEnabled = st.faceDetectionEnabled;

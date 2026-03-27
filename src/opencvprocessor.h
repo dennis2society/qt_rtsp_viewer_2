@@ -42,7 +42,7 @@ public:
 
     // ── detection overlays (paint directly on QImage) ───────────────
     void applyMotionDetectionOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, int sensitivity);
-    void applyMotionVectorsOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev);
+    void applyMotionVectorsOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, bool showTraces = false, int traceDecay = 50);
     void applyFaceDetection(QImage &image, const cv::Mat &bgrClean);
 
     // ── motion analysis ─────────────────────────────────────────────
@@ -77,4 +77,12 @@ private:
 
     // OpenCL availability (checked once at construction)
     bool m_haveOpenCL = false;
+
+    // Motion traces (decaying centroid trails)
+    struct TracePoint {
+        QPointF pos;
+        double opacity;
+    };
+    std::deque<TracePoint> m_motionTraces;
+    static constexpr int kMaxTracePoints = 200;
 };

@@ -70,6 +70,8 @@ public:
         bool motionDetectionEnabled = false;
         int motionSensitivity = 20;
         bool motionVectorsEnabled = false;
+        bool motionTracesEnabled = false;
+        int motionTraceDecay = 50;
         bool motionGraphEnabled = false;
         int motionGraphSensitivity = 50;
         bool faceDetectionEnabled = false;
