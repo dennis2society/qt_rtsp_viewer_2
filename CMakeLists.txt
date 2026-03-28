@@ -72,6 +72,8 @@ set(SOURCES
     src/recordingworker.cpp
     src/effectssidebar.cpp
     src/opencvprocessor.cpp
+    src/motionlogger.cpp
+    src/motiontracker.cpp
     src/recorddialog.cpp
     src/onvifclient.cpp
     src/onvifsettingsdialog.cpp
@@ -88,10 +90,13 @@ set(HEADERS
     src/recordingworker.h
     src/effectssidebar.h
     src/opencvprocessor.h
+    src/motionlogger.h
+    src/motiontracker.h
     src/recorddialog.h
     src/onvifclient.h
     src/onvifsettingsdialog.h
 )
+
 
 add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
 
@@ -121,3 +126,5 @@ add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         $<TARGET_FILE_DIR:${PROJECT_NAME}>/opencv
     COMMENT "Copying OpenCV data files to output directory"
 )
+
+

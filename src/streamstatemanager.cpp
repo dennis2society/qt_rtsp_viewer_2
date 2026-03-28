@@ -246,6 +246,8 @@ void StreamStateManager::loadSettings()
         e.motionGraphSensitivity = m_settings.value(QStringLiteral("motionGraphSensitivity"), 50).toInt();
         e.faceDetectionEnabled = m_settings.value(QStringLiteral("faceDetectionEnabled"), false).toBool();
         e.overlayEnabled = m_settings.value(QStringLiteral("overlayEnabled"), true).toBool();
+        e.motionCsvEnabled = m_settings.value(QStringLiteral("motionCsvEnabled"), false).toBool();
+        e.recordCleanVideo = m_settings.value(QStringLiteral("recordCleanVideo"), false).toBool();
         e.recordCodec = m_settings.value(QStringLiteral("recordCodec"), QStringLiteral("libx264")).toString();
         e.recordFormat = m_settings.value(QStringLiteral("recordFormat"), QStringLiteral("mp4")).toString();
         e.recordFps = m_settings.value(QStringLiteral("recordFps"), 25.0).toDouble();
@@ -296,6 +298,8 @@ void StreamStateManager::saveSettings()
         m_settings.setValue(QStringLiteral("motionGraphSensitivity"), m_openTabs[i].motionGraphSensitivity);
         m_settings.setValue(QStringLiteral("faceDetectionEnabled"), m_openTabs[i].faceDetectionEnabled);
         m_settings.setValue(QStringLiteral("overlayEnabled"), m_openTabs[i].overlayEnabled);
+        m_settings.setValue(QStringLiteral("motionCsvEnabled"), m_openTabs[i].motionCsvEnabled);
+        m_settings.setValue(QStringLiteral("recordCleanVideo"), m_openTabs[i].recordCleanVideo);
         m_settings.setValue(QStringLiteral("recordCodec"), m_openTabs[i].recordCodec);
         m_settings.setValue(QStringLiteral("recordFormat"), m_openTabs[i].recordFormat);
         m_settings.setValue(QStringLiteral("recordFps"), m_openTabs[i].recordFps);

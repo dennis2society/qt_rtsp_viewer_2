@@ -111,6 +111,8 @@ MainWindow::MainWindow(QWidget *parent)
                     s.motionGraphSensitivity = entry.motionGraphSensitivity;
                     s.faceDetectionEnabled = entry.faceDetectionEnabled;
                     s.overlayEnabled = entry.overlayEnabled;
+                    s.motionCsvEnabled = entry.motionCsvEnabled;
+                    s.recordCleanVideo = entry.recordCleanVideo;
                     s.recordCodec = entry.recordCodec;
                     s.recordFormat = entry.recordFormat;
                     s.recordFps = entry.recordFps;
@@ -178,6 +180,8 @@ MainWindow::~MainWindow()
             entry.motionGraphSensitivity = st.motionGraphSensitivity;
             entry.faceDetectionEnabled = st.faceDetectionEnabled;
             entry.overlayEnabled = st.overlayEnabled;
+            entry.motionCsvEnabled = st.motionCsvEnabled;
+            entry.recordCleanVideo = st.recordCleanVideo;
             entry.recordCodec = st.recordCodec;
             entry.recordFormat = st.recordFormat;
             entry.recordFps = st.recordFps;

@@ -99,8 +99,7 @@ void VideoPlayer::stopWorker()
     // worker.  We must sever that link before tearing down threads,
     // otherwise the multimedia thread can call into a dying worker.
     if (m_worker)
-        disconnect(m_captureSink, &QVideoSink::videoFrameChanged,
-                   m_worker, &VideoWorker::submitFrame);
+        disconnect(m_captureSink, &QVideoSink::videoFrameChanged, m_worker, &VideoWorker::submitFrame);
 
     // ── Stop recorder thread first (may need to flush) ───────────────
     if (m_recorderThread) {
@@ -177,7 +176,7 @@ void VideoPlayer::startRecording(const QString &path, const QString &codec, doub
 
     // Tell the video worker it should start sending frames for recording
     if (m_worker)
-        QMetaObject::invokeMethod(m_worker, "setRecording", Qt::QueuedConnection, Q_ARG(bool, true));
+        QMetaObject::invokeMethod(m_worker, "setRecording", Qt::QueuedConnection, Q_ARG(bool, true), Q_ARG(QString, path));
 
     // Tell the recorder to open the file
     if (m_recorder)

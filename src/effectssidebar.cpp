@@ -169,6 +169,13 @@ void EffectsSidebar::setupUI()
     m_overlayCheck->setChecked(true);
     lay->addWidget(m_overlayCheck);
 
+    // CSV motion logging
+    m_motionCsvCheck = new QCheckBox(QStringLiteral("Log Motion CSV"));
+    lay->addWidget(m_motionCsvCheck);
+    m_recordCleanVideoCheck = new QCheckBox(QStringLiteral("  Record Clean Video"));
+    m_recordCleanVideoCheck->setVisible(false);
+    lay->addWidget(m_recordCleanVideoCheck);
+
     lay->addWidget(hLine());
 
     // ── Recording ───────────────────────────────────────────────────
@@ -291,6 +298,11 @@ void EffectsSidebar::connectSlots()
     connect(m_motionGraphSensSlider, &QSlider::valueChanged, this, changed);
     connect(m_faceDetCheck, &QCheckBox::toggled, this, changed);
     connect(m_overlayCheck, &QCheckBox::toggled, this, changed);
+    connect(m_motionCsvCheck, &QCheckBox::toggled, this, [this, changed](bool on) {
+        m_recordCleanVideoCheck->setVisible(on);
+        changed();
+    });
+    connect(m_recordCleanVideoCheck, &QCheckBox::toggled, this, changed);
     connect(m_codecCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
     connect(m_formatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
 
@@ -340,6 +352,9 @@ void EffectsSidebar::connectSlots()
         m_motionGraphSensSlider->setValue(50);
         m_faceDetCheck->setChecked(false);
         m_overlayCheck->setChecked(true);
+        m_motionCsvCheck->setChecked(false);
+        m_recordCleanVideoCheck->setChecked(false);
+        m_recordCleanVideoCheck->setVisible(false);
         m_autoRecCheck->setChecked(false);
         m_thresholdSlider->setValue(50);
         m_thresholdLabel->setText(QStringLiteral("Motion Threshold: 50 %"));
@@ -419,6 +434,9 @@ void EffectsSidebar::bindToStream(int streamId)
     m_motionGraphSensSlider->setValue(st.motionGraphSensitivity);
     m_faceDetCheck->setChecked(st.faceDetectionEnabled);
     m_overlayCheck->setChecked(st.overlayEnabled);
+    m_motionCsvCheck->setChecked(st.motionCsvEnabled);
+    m_recordCleanVideoCheck->setChecked(st.recordCleanVideo);
+    m_recordCleanVideoCheck->setVisible(st.motionCsvEnabled);
 
     // Codec
     int ci = m_codecCombo->findData(st.recordCodec);
@@ -483,6 +501,8 @@ void EffectsSidebar::pushState()
         s.motionGraphSensitivity = m_motionGraphSensSlider->value();
         s.faceDetectionEnabled = m_faceDetCheck->isChecked();
         s.overlayEnabled = m_overlayCheck->isChecked();
+        s.motionCsvEnabled = m_motionCsvCheck->isChecked();
+        s.recordCleanVideo = m_recordCleanVideoCheck->isChecked();
         s.recordCodec = m_codecCombo->currentData().toString();
         s.recordFormat = m_formatCombo->currentData().toString();
         s.autoRecordEnabled = m_autoRecCheck->isChecked();
@@ -511,6 +531,8 @@ void EffectsSidebar::blockAllSignals(bool block)
     m_motionGraphSensSlider->blockSignals(block);
     m_faceDetCheck->blockSignals(block);
     m_overlayCheck->blockSignals(block);
+    m_motionCsvCheck->blockSignals(block);
+    m_recordCleanVideoCheck->blockSignals(block);
     m_codecCombo->blockSignals(block);
     m_formatCombo->blockSignals(block);
     m_autoRecCheck->blockSignals(block);

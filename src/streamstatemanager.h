@@ -77,6 +77,8 @@ public:
         int motionGraphSensitivity = 50;
         bool faceDetectionEnabled = false;
         bool overlayEnabled = true;
+        bool motionCsvEnabled = false;
+        bool recordCleanVideo = false;
         QString recordCodec = QStringLiteral("libx264");
         QString recordFormat = QStringLiteral("mp4");
         double recordFps = 25.0;

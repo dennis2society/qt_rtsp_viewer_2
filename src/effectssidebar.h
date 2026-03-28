@@ -63,6 +63,10 @@ private:
     // Overlay
     QCheckBox *m_overlayCheck = nullptr;
 
+    // CSV motion logging
+    QCheckBox *m_motionCsvCheck = nullptr;
+    QCheckBox *m_recordCleanVideoCheck = nullptr;
+
     // Recording
     QComboBox *m_codecCombo = nullptr;
     QComboBox *m_formatCombo = nullptr;

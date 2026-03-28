@@ -1,4 +1,6 @@
 #include "videoworker.h"
+#include "motionlogger.h"
+#include "motiontracker.h"
 #include "opencvprocessor.h"
 #include "streamstatemanager.h"
 
@@ -17,6 +19,9 @@ VideoWorker::VideoWorker(int streamId, QObject *parent)
     , m_streamId(streamId)
 {
     m_processor = new OpenCVProcessor();
+    m_motionLogger = new MotionLogger();
+    m_detTracker = new MotionTracker();
+    m_vecTracker = new MotionTracker();
     m_fpsTimer = QDateTime::currentDateTime();
 
     // Zero-interval timer drives frame processing on this thread's event loop.
@@ -30,6 +35,9 @@ VideoWorker::VideoWorker(int streamId, QObject *parent)
 VideoWorker::~VideoWorker()
 {
     delete m_processor;
+    delete m_motionLogger;
+    delete m_detTracker;
+    delete m_vecTracker;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -45,9 +53,13 @@ void VideoWorker::setStreamActive(bool a)
         m_processTimer->stop();
     }
 }
-void VideoWorker::setRecording(bool on)
+void VideoWorker::setRecording(bool on, const QString &recPath)
 {
     m_recording = on;
+    if (on && !recPath.isEmpty())
+        m_recPath = recPath;
+    if (!on && m_motionLogger->isOpen())
+        m_motionLogger->close();
 }
 void VideoWorker::resetStream()
 {
@@ -179,20 +191,110 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     const cv::Mat &refGray = m_processor->referenceGray();
 
+    // ── CSV motion logging setup ────────────────────────────────────
+    bool csvActive = m_recording && st.motionCsvEnabled;
+    bool recordClean = m_recording && st.recordCleanVideo;
+
+    // Open CSV logger on first recording frame
+    if (csvActive && !m_motionLogger->isOpen()) {
+        // Derive CSV path from recording path: replace extension with _motion.csv
+        QString csvPath = m_recPath;
+        int dotIdx = csvPath.lastIndexOf(QLatin1Char('.'));
+        if (dotIdx > 0)
+            csvPath = csvPath.left(dotIdx);
+        csvPath += QStringLiteral("_motion.csv");
+        m_motionLogger->open(csvPath);
+        m_logFrameNumber = 0;
+        m_logStartTime = QDateTime::currentDateTime();
+    }
+
+    // Save a clean copy for recording BEFORE any overlays are drawn
+    QImage cleanImage;
+    if (recordClean)
+        cleanImage = image.copy();
+
+    QVector<MotionLogger::DetectionBlob> detBlobs;
+    QVector<MotionLogger::VectorBlob> vecBlobs;
+
     if (isSpike || refGray.empty()) {
         motionLevel = m_processor->decayMotionLevels();
     } else {
         // 8. Motion detection overlay
         if (st.motionDetectionEnabled)
-            m_processor->applyMotionDetectionOverlay(image, cleanGray, refGray, st.motionSensitivity, st.motionTracesEnabled, st.motionTraceDecay);
+            m_processor->applyMotionDetectionOverlay(image,
+                                                     cleanGray,
+                                                     refGray,
+                                                     st.motionSensitivity,
+                                                     st.motionTracesEnabled,
+                                                     st.motionTraceDecay,
+                                                     true,
+                                                     csvActive ? &detBlobs : nullptr);
 
         // 9. Motion vectors overlay
-        if (st.motionVectorsEnabled)
-            m_processor->applyMotionVectorsOverlay(image, cleanGray, refGray, st.motionVectorsSensitivity, st.motionTracesEnabled, st.motionTraceDecay);
+        if (st.motionVectorsEnabled) {
+            m_processor->applyMotionVectorsOverlay(image,
+                                                   cleanGray,
+                                                   refGray,
+                                                   st.motionVectorsSensitivity,
+                                                   st.motionTracesEnabled,
+                                                   st.motionTraceDecay,
+                                                   true,
+                                                   csvActive ? &vecBlobs : nullptr);
+        }
 
         // 10. Motion level (for graph + auto-record)
         if (st.motionGraphEnabled || st.autoRecordEnabled)
             motionLevel = m_processor->computeMotionLevel(cleanGray, refGray, st.motionGraphSensitivity);
+    }
+
+    // ── Kalman-filter tracking ──────────────────────────────────────
+    if (csvActive) {
+        // Update detection tracker
+        if (!detBlobs.isEmpty()) {
+            QVector<QRect> rects;
+            rects.reserve(detBlobs.size());
+            for (const auto &d : detBlobs)
+                rects.append(d.bbox);
+            auto tracked = m_detTracker->update(rects);
+            // Assign track IDs back to blobs via matched bounding boxes
+            for (auto &d : detBlobs) {
+                for (const auto &t : tracked) {
+                    if (t.smoothedBox.intersects(d.bbox)) {
+                        d.trackId = t.id;
+                        d.bbox = t.smoothedBox; // use smoothed box
+                        break;
+                    }
+                }
+            }
+        } else {
+            m_detTracker->update({}); // let tracker predict/age
+        }
+
+        // Update vector blob tracker
+        if (!vecBlobs.isEmpty()) {
+            QVector<QRect> rects;
+            rects.reserve(vecBlobs.size());
+            for (const auto &v : vecBlobs)
+                rects.append(v.bbox);
+            auto tracked = m_vecTracker->update(rects);
+            for (auto &v : vecBlobs) {
+                for (const auto &t : tracked) {
+                    if (t.smoothedBox.intersects(v.bbox)) {
+                        v.trackId = t.id;
+                        v.bbox = t.smoothedBox;
+                        break;
+                    }
+                }
+            }
+        } else {
+            m_vecTracker->update({});
+        }
+    }
+
+    // ── Write CSV row(s) for this frame ─────────────────────────────
+    if (csvActive && m_motionLogger->isOpen() && (!detBlobs.isEmpty() || !vecBlobs.isEmpty())) {
+        double tsSec = m_logStartTime.msecsTo(QDateTime::currentDateTime()) / 1000.0;
+        m_motionLogger->logFrame(m_logFrameNumber, tsSec, m_fps, detBlobs, vecBlobs);
     }
 
     // 11. Face detection (independent of motion spike)
@@ -214,8 +316,12 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
         paintFpsOverlay(image);
 
     // 16. Send frame to recording thread (non-blocking)
-    if (m_recording && m_streamActive)
-        emit frameForRecording(image);
+    if (m_recording && m_streamActive) {
+        emit frameForRecording(recordClean ? cleanImage : image);
+        // CSV frame counter synced to recorded frames
+        if (csvActive)
+            ++m_logFrameNumber;
+    }
 
     // 17. Auto-record logic
     if (st.autoRecordEnabled)
@@ -303,6 +409,8 @@ void VideoWorker::handleAutoRecord(double motionLevel)
             QString path = m_recPath;
             m_recording = false;
             m_autoRecording = false;
+            if (m_motionLogger->isOpen())
+                m_motionLogger->close();
 
             StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
                 s.isRecording = false;

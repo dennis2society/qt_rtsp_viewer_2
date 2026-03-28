@@ -261,7 +261,9 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
                                                   const cv::Mat &grayPrev,
                                                   int sensitivity,
                                                   bool showTraces,
-                                                  int traceDecay)
+                                                  int traceDecay,
+                                                  bool drawOverlay,
+                                                  QVector<MotionLogger::DetectionBlob> *outBlobs)
 {
     int thresh = std::max(1, 100 - sensitivity);
 
@@ -326,44 +328,36 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
         }
     }
 
-    QPainter p(&image);
-    p.setPen(QPen(Qt::red, 2));
-    for (const auto &r : boxes)
-        p.drawRect(r.x, r.y, r.width, r.height);
+    // Populate output blobs for CSV logging
+    if (outBlobs) {
+        outBlobs->clear();
+        for (const auto &r : boxes)
+            outBlobs->append({QRect(r.x, r.y, r.width, r.height)});
+    }
 
-    // Motion traces from detection centroids
-    if (showTraces && !boxes.empty()) {
-        double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
-        for (auto &t : m_detectionTraces)
-            t.opacity *= decayFactor;
-        while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
-            m_detectionTraces.pop_front();
+    if (drawOverlay) {
+        QPainter p(&image);
+        p.setPen(QPen(Qt::red, 2));
+        for (const auto &r : boxes)
+            p.drawRect(r.x, r.y, r.width, r.height);
 
-        for (const auto &r : boxes) {
-            double cx = r.x + r.width * 0.5;
-            double cy = r.y + r.height * 0.5;
-            m_detectionTraces.push_back({QPointF(cx, cy), 1.0});
-        }
+        // Motion traces from detection centroids
+        if (showTraces && !boxes.empty()) {
+            double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
+            for (auto &t : m_detectionTraces)
+                t.opacity *= decayFactor;
+            while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
+                m_detectionTraces.pop_front();
 
-        while (static_cast<int>(m_detectionTraces.size()) > kMaxTracePoints)
-            m_detectionTraces.pop_front();
+            for (const auto &r : boxes) {
+                double cx = r.x + r.width * 0.5;
+                double cy = r.y + r.height * 0.5;
+                m_detectionTraces.push_back({QPointF(cx, cy), 1.0});
+            }
 
-        p.setPen(Qt::NoPen);
-        for (const auto &t : m_detectionTraces) {
-            int alpha = static_cast<int>(t.opacity * 200);
-            double radius = 3.0 + t.opacity * 5.0;
-            p.setBrush(QColor(255, 80, 80, alpha));
-            p.drawEllipse(t.pos, radius, radius);
-        }
-    } else if (showTraces) {
-        // Decay traces even when no boxes this frame
-        double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
-        for (auto &t : m_detectionTraces)
-            t.opacity *= decayFactor;
-        while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
-            m_detectionTraces.pop_front();
+            while (static_cast<int>(m_detectionTraces.size()) > kMaxTracePoints)
+                m_detectionTraces.pop_front();
 
-        if (!m_detectionTraces.empty()) {
             p.setPen(Qt::NoPen);
             for (const auto &t : m_detectionTraces) {
                 int alpha = static_cast<int>(t.opacity * 200);
@@ -371,10 +365,27 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
                 p.setBrush(QColor(255, 80, 80, alpha));
                 p.drawEllipse(t.pos, radius, radius);
             }
-        }
-    }
+        } else if (showTraces) {
+            // Decay traces even when no boxes this frame
+            double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
+            for (auto &t : m_detectionTraces)
+                t.opacity *= decayFactor;
+            while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
+                m_detectionTraces.pop_front();
 
-    p.end();
+            if (!m_detectionTraces.empty()) {
+                p.setPen(Qt::NoPen);
+                for (const auto &t : m_detectionTraces) {
+                    int alpha = static_cast<int>(t.opacity * 200);
+                    double radius = 3.0 + t.opacity * 5.0;
+                    p.setBrush(QColor(255, 80, 80, alpha));
+                    p.drawEllipse(t.pos, radius, radius);
+                }
+            }
+        }
+
+        p.end();
+    } // drawOverlay
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -385,7 +396,9 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image,
                                                 const cv::Mat &grayPrev,
                                                 int sensitivity,
                                                 bool showTraces,
-                                                int traceDecay)
+                                                int traceDecay,
+                                                bool drawOverlay,
+                                                QVector<MotionLogger::VectorBlob> *outBlobs)
 {
     cv::Mat flow;
 
@@ -447,72 +460,99 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image,
         }
     }
 
-    QPainter p(&image);
-    p.setRenderHint(QPainter::Antialiasing);
-    for (int b = 0; b < kBuckets; ++b) {
-        if (bucketLines[b].empty())
-            continue;
-        p.setPen(QPen(bucketColors[b], 2));
-        p.drawLines(bucketLines[b].data(), static_cast<int>(bucketLines[b].size()));
-    }
+    // ── Vector blob extraction (coarse 6×4 grid for CSV + traces) ──
+    static constexpr int kTCols = 6;
+    static constexpr int kTRows = 4;
+    int cellW = flow.cols / kTCols;
+    int cellH = flow.rows / kTRows;
 
-    // ── Motion traces (decaying centroid trails) ────────────────────
-    if (showTraces) {
-        // Decay existing traces  (slider 1–100 → factor 0.80–0.99)
-        double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
-        for (auto &t : m_motionTraces)
-            t.opacity *= decayFactor;
-        while (!m_motionTraces.empty() && m_motionTraces.front().opacity < 0.03)
-            m_motionTraces.pop_front();
+    // Always compute grid blobs (needed for CSV logging and traces)
+    struct GridBlob {
+        QRect bbox;
+        QPointF cog;
+        double avgMag;
+    };
+    QVector<GridBlob> gridBlobs;
 
-        // Find high-motion centroids in a coarse grid
-        static constexpr int kTCols = 6;
-        static constexpr int kTRows = 4;
-        int cellW = flow.cols / kTCols;
-        int cellH = flow.rows / kTRows;
-        if (cellW > 0 && cellH > 0) {
-            for (int row = 0; row < kTRows; ++row) {
-                for (int col = 0; col < kTCols; ++col) {
-                    double sumMag = 0, sumX = 0, sumY = 0;
-                    int count = 0;
-                    int yEnd = std::min((row + 1) * cellH, flow.rows);
-                    int xEnd = std::min((col + 1) * cellW, flow.cols);
-                    for (int y = row * cellH; y < yEnd; ++y) {
-                        for (int x = col * cellW; x < xEnd; ++x) {
-                            const auto &f = flow.at<cv::Point2f>(y, x);
-                            double mag = std::sqrt(f.x * f.x + f.y * f.y);
-                            if (mag > 1.0) {
-                                sumMag += mag;
-                                sumX += x * mag;
-                                sumY += y * mag;
-                                ++count;
-                            }
+    double magThreshGrid = 2.0 - (sensitivity - 1) * (1.8 / 99.0);
+    if (cellW > 0 && cellH > 0) {
+        for (int row = 0; row < kTRows; ++row) {
+            for (int col = 0; col < kTCols; ++col) {
+                double sumMag = 0, sumX = 0, sumY = 0;
+                int count = 0;
+                int yEnd = std::min((row + 1) * cellH, flow.rows);
+                int xEnd = std::min((col + 1) * cellW, flow.cols);
+                for (int y = row * cellH; y < yEnd; ++y) {
+                    for (int x = col * cellW; x < xEnd; ++x) {
+                        const auto &f = flow.at<cv::Point2f>(y, x);
+                        double mag = std::sqrt(f.x * f.x + f.y * f.y);
+                        if (mag > magThreshGrid) {
+                            sumMag += mag;
+                            sumX += x * mag;
+                            sumY += y * mag;
+                            ++count;
                         }
                     }
-                    if (count > cellW * cellH / 10) {
-                        double cx = (sumX / sumMag) * scaleX;
-                        double cy = (sumY / sumMag) * scaleY;
-                        m_motionTraces.push_back({QPointF(cx, cy), 1.0});
-                    }
+                }
+                if (count > cellW * cellH / 10) {
+                    double cx = (sumX / sumMag) * scaleX;
+                    double cy = (sumY / sumMag) * scaleY;
+                    int bx = static_cast<int>(col * cellW * scaleX);
+                    int by = static_cast<int>(row * cellH * scaleY);
+                    int bw = static_cast<int>(cellW * scaleX);
+                    int bh = static_cast<int>(cellH * scaleY);
+                    gridBlobs.append({QRect(bx, by, bw, bh), QPointF(cx, cy), sumMag / count});
                 }
             }
         }
-
-        // Cap trace buffer
-        while (static_cast<int>(m_motionTraces.size()) > kMaxTracePoints)
-            m_motionTraces.pop_front();
-
-        // Draw traces as fading orange circles
-        p.setPen(Qt::NoPen);
-        for (const auto &t : m_motionTraces) {
-            int alpha = static_cast<int>(t.opacity * 200);
-            double radius = 3.0 + t.opacity * 5.0;
-            p.setBrush(QColor(255, 165, 0, alpha));
-            p.drawEllipse(t.pos, radius, radius);
-        }
     }
 
-    p.end();
+    // Populate output blobs for CSV logging
+    if (outBlobs) {
+        outBlobs->clear();
+        for (const auto &gb : gridBlobs)
+            outBlobs->append({gb.bbox, gb.cog, gb.avgMag});
+    }
+
+    if (drawOverlay) {
+        QPainter p(&image);
+        p.setRenderHint(QPainter::Antialiasing);
+        for (int b = 0; b < kBuckets; ++b) {
+            if (bucketLines[b].empty())
+                continue;
+            p.setPen(QPen(bucketColors[b], 2));
+            p.drawLines(bucketLines[b].data(), static_cast<int>(bucketLines[b].size()));
+        }
+
+        // ── Motion traces (decaying centroid trails) ────────────────────
+        if (showTraces) {
+            // Decay existing traces  (slider 1–100 → factor 0.80–0.99)
+            double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
+            for (auto &t : m_motionTraces)
+                t.opacity *= decayFactor;
+            while (!m_motionTraces.empty() && m_motionTraces.front().opacity < 0.03)
+                m_motionTraces.pop_front();
+
+            // Add centroids from grid blobs
+            for (const auto &gb : gridBlobs)
+                m_motionTraces.push_back({gb.cog, 1.0});
+
+            // Cap trace buffer
+            while (static_cast<int>(m_motionTraces.size()) > kMaxTracePoints)
+                m_motionTraces.pop_front();
+
+            // Draw traces as fading orange circles
+            p.setPen(Qt::NoPen);
+            for (const auto &t : m_motionTraces) {
+                int alpha = static_cast<int>(t.opacity * 200);
+                double radius = 3.0 + t.opacity * 5.0;
+                p.setBrush(QColor(255, 165, 0, alpha));
+                p.drawEllipse(t.pos, radius, radius);
+            }
+        }
+
+        p.end();
+    } // drawOverlay
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

@@ -10,6 +10,8 @@
 #include <opencv2/core.hpp>
 
 class OpenCVProcessor;
+class MotionLogger;
+class MotionTracker;
 class QTimer;
 
 /// Lives on a dedicated QThread.  Receives raw QVideoFrames, applies the
@@ -37,7 +39,7 @@ public slots:
     void resetStream(); // clears inter-frame state when URL changes
 
     // ── recording state (kept for auto-record logic) ────────────────
-    void setRecording(bool on);
+    void setRecording(bool on, const QString &recPath = QString());
 
 signals:
     void frameReady(const QImage &image);
@@ -88,6 +90,15 @@ private:
     QString m_recPath;
     QString m_recCodec;
     double m_recFps = 25.0;
+
+    // ── CSV motion logging ──────────────────────────────────────────
+    MotionLogger *m_motionLogger = nullptr;
+    qint64 m_logFrameNumber = 0;
+    QDateTime m_logStartTime;
+
+    // ── Kalman-filter trackers ──────────────────────────────────────
+    MotionTracker *m_detTracker = nullptr; // detection blobs
+    MotionTracker *m_vecTracker = nullptr; // vector blobs
 
     // ── Auto-record ─────────────────────────────────────────────────
     bool m_autoRecording = false;

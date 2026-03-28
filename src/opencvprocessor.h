@@ -2,11 +2,16 @@
 
 #include <QFile>
 #include <QImage>
+#include <QPointF>
+#include <QRect>
+#include <QVector>
 #include <deque>
 
 #include <opencv2/core.hpp>
 #include <opencv2/core/ocl.hpp>
 #include <opencv2/objdetect.hpp>
+
+#include "motionlogger.h"
 
 /// Pure image-processing utility – no QObject, no threading awareness.
 /// One instance per VideoWorker (i.e. per stream).
@@ -50,14 +55,22 @@ public:
     double decayMotionLevels();
 
     // ── detection overlays (paint directly on QImage) ───────────────
-    void
-    applyMotionDetectionOverlay(QImage &image, const cv::Mat &grayCur, const cv::Mat &grayPrev, int sensitivity, bool showTraces = false, int traceDecay = 50);
+    void applyMotionDetectionOverlay(QImage &image,
+                                     const cv::Mat &grayCur,
+                                     const cv::Mat &grayPrev,
+                                     int sensitivity,
+                                     bool showTraces = false,
+                                     int traceDecay = 50,
+                                     bool drawOverlay = true,
+                                     QVector<MotionLogger::DetectionBlob> *outBlobs = nullptr);
     void applyMotionVectorsOverlay(QImage &image,
                                    const cv::Mat &grayCur,
                                    const cv::Mat &grayPrev,
                                    int sensitivity = 50,
                                    bool showTraces = false,
-                                   int traceDecay = 50);
+                                   int traceDecay = 50,
+                                   bool drawOverlay = true,
+                                   QVector<MotionLogger::VectorBlob> *outBlobs = nullptr);
     void applyFaceDetection(QImage &image, const cv::Mat &bgrClean);
 
     // ── motion analysis ─────────────────────────────────────────────

@@ -49,6 +49,10 @@ struct StreamState {
 
     bool overlayEnabled = true; // FPS / resolution / datetime
 
+    // ── CSV motion logging ─────────────────────────────────────────
+    bool motionCsvEnabled = false; // log motion data to CSV during recording
+    bool recordCleanVideo = false; // record pre-overlay frame (overlays still visible on screen)
+
     // ── auto-record on motion ──────────────────────────────────────
     bool autoRecordEnabled = false;
     double autoRecordThreshold = 0.50; // 0.0 … 1.0
