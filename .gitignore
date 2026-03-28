@@ -64,3 +64,4 @@ Makefile
 *.log
 rec/
 prompt.txt
+__pycache__/
