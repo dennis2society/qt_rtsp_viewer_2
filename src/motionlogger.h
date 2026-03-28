@@ -29,6 +29,8 @@ public:
     /// Bounding-box blob from motion detection overlay.
     struct DetectionBlob {
         QRect bbox; // bounding rect (x,y,w,h)
+        QPointF cog; // centre-of-gravity (pixel-count weighted)
+        double magnitude = 0.0; // active-pixel density [0..1]
         int trackId = -1; // assigned by tracker (-1 = untracked)
     };
 

@@ -267,6 +267,7 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
 {
     int thresh = std::max(1, 100 - sensitivity);
 
+    // ── 1. Threshold the inter-frame difference ──────────────────────────────
     if (m_haveOpenCL) {
         cv::UMat uCur, uPrev, uDiff, uThresh;
         grayCur.copyTo(uCur);
@@ -279,113 +280,174 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
         cv::threshold(m_work2, m_work3, thresh, 255, cv::THRESH_BINARY);
     }
 
-    // Morphological cleanup: dilate to bridge nearby regions, then erode to remove specks
-    cv::Mat kernel = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
-    cv::dilate(m_work3, m_work3, kernel, cv::Point(-1, -1), 1);
-    cv::erode(m_work3, m_work3, kernel, cv::Point(-1, -1), 1);
+    const int W = m_work3.cols;
+    const int H = m_work3.rows;
 
-    std::vector<std::vector<cv::Point>> contours;
-    cv::findContours(m_work3, contours, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
+    // ── 2. Grid-cell classification ──────────────────────────────────────────
+    // Cell size ≈ 1/50 of the shorter dimension (min 8 px).
+    // Using cells ensures the bounding box grid *fully covers* every active pixel.
+    const int cellSize = std::max(8, std::min(W, H) / 50);
+    const int gridCols = (W + cellSize - 1) / cellSize;
+    const int gridRows = (H + cellSize - 1) / cellSize;
 
-    // Collect significant bounding boxes
-    std::vector<cv::Rect> boxes;
-    for (const auto &c : contours) {
-        if (cv::contourArea(c) > 1000)
-            boxes.push_back(cv::boundingRect(c));
+    // A cell is "active" when at least minCellFraction of its pixels are above thresh.
+    const int minPixels = std::max(1, static_cast<int>(cellSize * cellSize * 0.08));
+
+    std::vector<bool> active(static_cast<size_t>(gridCols * gridRows), false);
+    for (int gr = 0; gr < gridRows; ++gr) {
+        for (int gc = 0; gc < gridCols; ++gc) {
+            const int x0 = gc * cellSize, y0 = gr * cellSize;
+            const cv::Rect roi(x0, y0, std::min(cellSize, W - x0), std::min(cellSize, H - y0));
+            active[static_cast<size_t>(gr * gridCols + gc)] = (cv::countNonZero(m_work3(roi)) >= minPixels);
+        }
     }
 
-    // Cluster nearby boxes by merging overlapping/touching rectangles
-    // Expand each box slightly for proximity merging, then iteratively merge
-    if (!boxes.empty()) {
-        constexpr int kMergeMargin = 30; // pixels
-        bool merged = true;
-        while (merged) {
-            merged = false;
-            for (size_t i = 0; i < boxes.size(); ++i) {
-                cv::Rect expanded_i(boxes[i].x - kMergeMargin,
-                                    boxes[i].y - kMergeMargin,
-                                    boxes[i].width + 2 * kMergeMargin,
-                                    boxes[i].height + 2 * kMergeMargin);
-                for (size_t j = i + 1; j < boxes.size();) {
-                    cv::Rect expanded_j(boxes[j].x - kMergeMargin,
-                                        boxes[j].y - kMergeMargin,
-                                        boxes[j].width + 2 * kMergeMargin,
-                                        boxes[j].height + 2 * kMergeMargin);
-                    if ((expanded_i & expanded_j).area() > 0) {
-                        boxes[i] = boxes[i] | boxes[j]; // union
-                        boxes.erase(boxes.begin() + static_cast<long>(j));
-                        // Re-expand after merge
-                        expanded_i = cv::Rect(boxes[i].x - kMergeMargin,
-                                              boxes[i].y - kMergeMargin,
-                                              boxes[i].width + 2 * kMergeMargin,
-                                              boxes[i].height + 2 * kMergeMargin);
-                        merged = true;
-                    } else {
-                        ++j;
+    // ── 3. 8-neighbour BFS connected-component labelling on the cell grid ────
+    std::vector<int> labels(static_cast<size_t>(gridCols * gridRows), -1);
+    int numBlobs = 0;
+    for (int gr = 0; gr < gridRows; ++gr) {
+        for (int gc = 0; gc < gridCols; ++gc) {
+            const int idx = gr * gridCols + gc;
+            if (!active[static_cast<size_t>(idx)] || labels[static_cast<size_t>(idx)] >= 0)
+                continue;
+            std::vector<int> queue = {idx};
+            labels[static_cast<size_t>(idx)] = numBlobs;
+            for (std::size_t qi = 0; qi < queue.size(); ++qi) {
+                const int cur = queue[qi];
+                const int cr = cur / gridCols, cc = cur % gridCols;
+                for (int dr = -1; dr <= 1; ++dr) {
+                    for (int dc = -1; dc <= 1; ++dc) {
+                        if (dr == 0 && dc == 0)
+                            continue;
+                        const int nr = cr + dr, nc = cc + dc;
+                        if (nr < 0 || nr >= gridRows || nc < 0 || nc >= gridCols)
+                            continue;
+                        const int nidx = nr * gridCols + nc;
+                        if (active[static_cast<size_t>(nidx)] && labels[static_cast<size_t>(nidx)] < 0) {
+                            labels[static_cast<size_t>(nidx)] = numBlobs;
+                            queue.push_back(nidx);
+                        }
                     }
                 }
             }
+            ++numBlobs;
         }
     }
 
-    // Populate output blobs for CSV logging
+    // ── 4. Bounding boxes + CoG + magnitude from cell-union ──────────────────
+    struct BlobStats {
+        cv::Rect box; // starts empty; first |= sets it
+        int cellCount = 0;
+        double cogXW = 0.0;
+        double cogYW = 0.0;
+        int activePixels = 0;
+        int totalPixels = 0;
+    };
+    std::vector<BlobStats> stats(static_cast<size_t>(numBlobs));
+
+    for (int gr = 0; gr < gridRows; ++gr) {
+        for (int gc = 0; gc < gridCols; ++gc) {
+            const int lbl = labels[static_cast<size_t>(gr * gridCols + gc)];
+            if (lbl < 0)
+                continue;
+            const int x0 = gc * cellSize, y0 = gr * cellSize;
+            const cv::Rect cell(x0, y0, std::min(cellSize, W - x0), std::min(cellSize, H - y0));
+            BlobStats &bs = stats[static_cast<size_t>(lbl)];
+            bs.box |= cell;
+            ++bs.cellCount;
+            const int nz = cv::countNonZero(m_work3(cell));
+            const double cx = x0 + cell.width * 0.5;
+            const double cy = y0 + cell.height * 0.5;
+            bs.cogXW += cx * nz;
+            bs.cogYW += cy * nz;
+            bs.activePixels += nz;
+            bs.totalPixels += cell.area();
+        }
+    }
+
+    // Discard single-cell noise bursts; compute final per-blob stats
+    struct FinalBlob {
+        cv::Rect box;
+        double cogX, cogY, magnitude;
+    };
+    std::vector<FinalBlob> finalBoxes;
+    for (int b = 0; b < numBlobs; ++b) {
+        const BlobStats &bs = stats[static_cast<size_t>(b)];
+        if (bs.cellCount < 2)
+            continue;
+        const double w = bs.activePixels > 0 ? static_cast<double>(bs.activePixels) : 1.0;
+        finalBoxes.push_back({
+            bs.box,
+            bs.cogXW / w,
+            bs.cogYW / w,
+            bs.totalPixels > 0 ? static_cast<double>(bs.activePixels) / bs.totalPixels : 0.0,
+        });
+    }
+
+    // ── 5. Populate CSV blobs ─────────────────────────────────────────────────
     if (outBlobs) {
         outBlobs->clear();
-        for (const auto &r : boxes)
-            outBlobs->append({QRect(r.x, r.y, r.width, r.height)});
+        for (const auto &fb : finalBoxes)
+            outBlobs->append({QRect(fb.box.x, fb.box.y, fb.box.width, fb.box.height), QPointF(fb.cogX, fb.cogY), fb.magnitude});
     }
 
-    if (drawOverlay) {
-        QPainter p(&image);
+    if (!drawOverlay)
+        return;
+
+    // ── 6. Draw: semi-transparent fill + internal grid lines + border ─────────
+    QPainter p(&image);
+    for (const auto &fb : finalBoxes) {
+        const cv::Rect &r = fb.box;
+        // Tinted fill
+        p.setBrush(QColor(255, 50, 50, 35));
+        p.setPen(Qt::NoPen);
+        p.drawRect(r.x, r.y, r.width, r.height);
+
+        // Internal grid lines (faint, show the underlying cell structure)
+        p.setPen(QPen(QColor(255, 90, 90, 70), 1));
+        for (int gx = r.x + cellSize; gx < r.x + r.width; gx += cellSize)
+            p.drawLine(gx, r.y, gx, r.y + r.height);
+        for (int gy = r.y + cellSize; gy < r.y + r.height; gy += cellSize)
+            p.drawLine(r.x, gy, r.x + r.width, gy);
+
+        // Solid outer border
+        p.setBrush(Qt::NoBrush);
         p.setPen(QPen(Qt::red, 2));
-        for (const auto &r : boxes)
-            p.drawRect(r.x, r.y, r.width, r.height);
+        p.drawRect(r.x, r.y, r.width, r.height);
+    }
 
-        // Motion traces from detection centroids
-        if (showTraces && !boxes.empty()) {
-            double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
-            for (auto &t : m_detectionTraces)
-                t.opacity *= decayFactor;
-            while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
-                m_detectionTraces.pop_front();
+    // Motion traces from blob centroids
+    if (showTraces) {
+        double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
+        for (auto &t : m_detectionTraces)
+            t.opacity *= decayFactor;
+        while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
+            m_detectionTraces.pop_front();
 
-            for (const auto &r : boxes) {
-                double cx = r.x + r.width * 0.5;
-                double cy = r.y + r.height * 0.5;
-                m_detectionTraces.push_back({QPointF(cx, cy), 1.0});
-            }
+        for (const auto &fb : finalBoxes)
+            m_detectionTraces.push_back({QPointF(fb.cogX, fb.cogY), 1.0});
+        while (static_cast<int>(m_detectionTraces.size()) > kMaxTracePoints)
+            m_detectionTraces.pop_front();
 
-            while (static_cast<int>(m_detectionTraces.size()) > kMaxTracePoints)
-                m_detectionTraces.pop_front();
-
+        if (!m_detectionTraces.empty()) {
             p.setPen(Qt::NoPen);
             for (const auto &t : m_detectionTraces) {
-                int alpha = static_cast<int>(t.opacity * 200);
-                double radius = 3.0 + t.opacity * 5.0;
+                const int alpha = static_cast<int>(t.opacity * 200);
+                const double rad = 3.0 + t.opacity * 5.0;
                 p.setBrush(QColor(255, 80, 80, alpha));
-                p.drawEllipse(t.pos, radius, radius);
-            }
-        } else if (showTraces) {
-            // Decay traces even when no boxes this frame
-            double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
-            for (auto &t : m_detectionTraces)
-                t.opacity *= decayFactor;
-            while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
-                m_detectionTraces.pop_front();
-
-            if (!m_detectionTraces.empty()) {
-                p.setPen(Qt::NoPen);
-                for (const auto &t : m_detectionTraces) {
-                    int alpha = static_cast<int>(t.opacity * 200);
-                    double radius = 3.0 + t.opacity * 5.0;
-                    p.setBrush(QColor(255, 80, 80, alpha));
-                    p.drawEllipse(t.pos, radius, radius);
-                }
+                p.drawEllipse(t.pos, rad, rad);
             }
         }
+    } else {
+        // Still decay traces even with no active boxes
+        double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
+        for (auto &t : m_detectionTraces)
+            t.opacity *= decayFactor;
+        while (!m_detectionTraces.empty() && m_detectionTraces.front().opacity < 0.03)
+            m_detectionTraces.pop_front();
+    }
 
-        p.end();
-    } // drawOverlay
+    p.end();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

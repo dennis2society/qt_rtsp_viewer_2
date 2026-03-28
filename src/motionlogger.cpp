@@ -40,8 +40,7 @@ void MotionLogger::logFrame(qint64 frameNumber, double timestampSec, double fps,
     for (const auto &d : detections) {
         m_stream << frameNumber << ',' << QString::number(timestampSec, 'f', 4) << ',' << unixMs << ',' << QString::number(fps, 'f', 1) << ',' << "detection"
                  << ',' << d.trackId << ',' << d.bbox.x() << ',' << d.bbox.y() << ',' << d.bbox.width() << ',' << d.bbox.height() << ','
-                 << ",," // no CoG or magnitude for detection
-                 << '\n';
+                 << QString::number(d.cog.x(), 'f', 1) << ',' << QString::number(d.cog.y(), 'f', 1) << ',' << QString::number(d.magnitude, 'f', 4) << '\n';
     }
 
     for (const auto &v : vectors) {
