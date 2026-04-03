@@ -1,23 +1,28 @@
 #!/usr/bin/env python3
-"""
-CSV Motion Replay Viewer
-========================
-Plays back a recorded video with motion data from the companion _motion.csv
-overlaid on top.  Detection blobs are drawn in green, vector blobs in cyan,
-and track IDs are labelled.  CoG markers and magnitude are shown for vector
-blobs.
+"""CSV Motion / Flow Replay Viewer
+=================================
+Plays back a recorded video with motion or flow data from a companion CSV
+overlaid on top.
 
 Usage:
-    python3 csv_replay.py [video_path]
+    python3 csv_replay.py [video_or_csv_path] [--csv CSV]
 
-If no path is given a file dialog opens.  The CSV is located automatically
-by replacing the video extension with _motion.csv.
+The first positional argument may be either a video file or a CSV file:
+  - Video: companion CSV is auto-detected (_deepflow, _dense_flow, _motion, or _offline_motion suffixes)
+  - CSV:   companion video is auto-detected by stripping the CSV suffix
+
+If no path is given a file dialog opens.
+Use --csv to supply an explicit CSV regardless of the first argument.
 """
 
+import argparse
 import csv
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+# Some flow CSVs have very long lines — raise the field-size limit to max
+csv.field_size_limit(sys.maxsize)
 
 import cv2
 import numpy as np
@@ -39,24 +44,50 @@ from PyQt6.QtWidgets import (
 # ─── File-dialog proxy: hide videos that have no companion CSV ──────────────
 
 class _CsvPairedFilter(QSortFilterProxyModel):
-    """Only show directories and video files that have a *_motion.csv partner."""
+    """Only show directories and video files that have a companion CSV."""
     def filterAcceptsRow(self, source_row, source_parent):
         model = self.sourceModel()
         index = model.index(source_row, 0, source_parent)
         if model.isDir(index):
             return True
         p = Path(model.filePath(index))
-        return p.with_name(p.stem + "_motion.csv").is_file()
+        return (p.with_name(p.stem + "_dense_flow.csv").is_file()
+                or p.with_name(p.stem + "_motion.csv").is_file())
 
 
 # ─── CSV loading ────────────────────────────────────────────────────────────
 
-def load_csv(csv_path: str) -> dict[int, list[dict]]:
-    """Return {frame_number: [row_dict, ...]}."""
+def _detect_csv_format(csv_path: str) -> str:
+    """Peek at header to decide format: 'dense_flow' or 'motion'."""
+    with open(csv_path, newline="") as f:
+        header = csv.DictReader(f).fieldnames or []
+    if "gx" in header and "gy" in header:
+        return "dense_flow"
+    return "motion"
+
+
+def _load_dense_flow_csv(csv_path: str) -> dict[int, list[dict]]:
+    """Load a _dense_flow.csv → {frame: [{type, gx, gy, dx, dy, mag}, ...]}."""
     data: dict[int, list[dict]] = defaultdict(list)
     with open(csv_path, newline="") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
+        for row in csv.DictReader(f):
+            frame = int(row["frame"])
+            data[frame].append({
+                "type": "flow",
+                "gx": int(row["gx"]),
+                "gy": int(row["gy"]),
+                "dx": float(row["dx"]),
+                "dy": float(row["dy"]),
+                "magnitude": float(row["mag"]),
+            })
+    return dict(data)
+
+
+def _load_motion_csv(csv_path: str) -> dict[int, list[dict]]:
+    """Load a _motion.csv → {frame: [row_dict, ...]}."""
+    data: dict[int, list[dict]] = defaultdict(list)
+    with open(csv_path, newline="") as f:
+        for row in csv.DictReader(f):
             frame = int(row["frame"])
             entry: dict = {
                 "type": row["type"],
@@ -81,6 +112,14 @@ def load_csv(csv_path: str) -> dict[int, list[dict]]:
     return dict(data)
 
 
+def load_csv(csv_path: str) -> tuple[dict[int, list[dict]], str]:
+    """Load CSV, auto-detecting format.  Returns (data, format_name)."""
+    fmt = _detect_csv_format(csv_path)
+    if fmt == "dense_flow":
+        return _load_dense_flow_csv(csv_path), fmt
+    return _load_motion_csv(csv_path), fmt
+
+
 # ─── Drawing ────────────────────────────────────────────────────────────────
 
 DET_COLOR = (0, 255, 0)       # green  (BGR)
@@ -91,8 +130,39 @@ FONT_SCALE = 0.55
 THICKNESS = 2
 
 
-def draw_overlays(frame: np.ndarray, rows: list[dict]) -> np.ndarray:
-    """Draw motion CSV entries onto a BGR frame (mutates in-place)."""
+FLOW_ARROW_SCALE = 3.0
+
+
+def draw_overlays(frame: np.ndarray, rows: list[dict],
+                  csv_format: str = "motion") -> np.ndarray:
+    """Draw CSV entries onto a BGR frame (mutates in-place)."""
+    if csv_format == "dense_flow":
+        return _draw_flow_overlays(frame, rows)
+    return _draw_motion_overlays(frame, rows)
+
+
+def _draw_flow_overlays(frame: np.ndarray, rows: list[dict]) -> np.ndarray:
+    """Draw dense_flow vectors as direction-coloured arrows."""
+    for r in rows:
+        gx, gy = r["gx"], r["gy"]
+        dx, dy = r["dx"], r["dy"]
+        mag = r["magnitude"]
+        # Direction → hue
+        angle = np.arctan2(dy, dx)
+        hue = int(((angle + np.pi) / (2 * np.pi)) * 179)
+        val = min(255, int(mag * 20 + 80))
+        hsv_pixel = np.array([[[hue, 255, val]]], dtype=np.uint8)
+        bgr_pixel = cv2.cvtColor(hsv_pixel, cv2.COLOR_HSV2BGR)
+        color = tuple(int(c) for c in bgr_pixel[0, 0])
+        tip_x = int(gx + dx * FLOW_ARROW_SCALE)
+        tip_y = int(gy + dy * FLOW_ARROW_SCALE)
+        cv2.arrowedLine(frame, (gx, gy), (tip_x, tip_y), color, 1,
+                        tipLength=0.3)
+    return frame
+
+
+def _draw_motion_overlays(frame: np.ndarray, rows: list[dict]) -> np.ndarray:
+    """Draw original motion CSV entries (bboxes, vector blobs)."""
     for r in rows:
         x, y, w, h = r["bbox"]
         is_vec = r["type"] == "vector_blob"
@@ -128,9 +198,11 @@ def draw_overlays(frame: np.ndarray, rows: list[dict]) -> np.ndarray:
 # ─── Qt viewer ──────────────────────────────────────────────────────────────
 
 class ReplayWindow(QMainWindow):
-    def __init__(self, video_path: str, csv_data: dict[int, list[dict]]):
+    def __init__(self, video_path: str, csv_data: dict[int, list[dict]],
+                 csv_format: str = "motion"):
         super().__init__()
         self.setWindowTitle(f"CSV Replay — {Path(video_path).name}")
+        self._csv_format = csv_format
 
         self._cap = cv2.VideoCapture(video_path)
         if not self._cap.isOpened():
@@ -268,7 +340,7 @@ class ReplayWindow(QMainWindow):
 
         # Draw CSV overlays
         if frame_no in self._csv:
-            draw_overlays(bgr, self._csv[frame_no])
+            draw_overlays(bgr, self._csv[frame_no], self._csv_format)
 
         # Draw frame counter
         text = f"Frame {frame_no}"
@@ -319,14 +391,90 @@ class ReplayWindow(QMainWindow):
 
 # ─── Main ───────────────────────────────────────────────────────────────────
 
+def _find_csv(video: Path, explicit: str | None = None) -> tuple[Path | None, str]:
+    """Locate companion CSV.  Returns (path, format) or (None, '')."""
+    if explicit:
+        p = Path(explicit)
+        if p.is_file():
+            return p, _detect_csv_format(str(p))
+        return None, ""
+    # Prefer deepflow, dense_flow, then motion, then _recording variants
+    for suffix, fmt in [
+        ("_deepflow.csv", "dense_flow"),
+        ("_dense_flow.csv", "dense_flow"),
+        ("_motion.csv", "motion"),
+        ("_offline_motion.csv", "motion"),
+    ]:
+        candidate = video.with_name(video.stem + suffix)
+        if candidate.is_file():
+            return candidate, fmt
+    # Try stripping _recording suffix
+    alt_stem = video.stem.replace("_recording", "")
+    for suffix, fmt in [
+        ("_dense_flow.csv", "dense_flow"),
+        ("_motion.csv", "motion"),
+    ]:
+        candidate = video.with_name(alt_stem + suffix)
+        if candidate.is_file():
+            return candidate, fmt
+    return None, ""
+
+
+VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".MP4", ".MKV", ".AVI", ".MOV"}
+_CSV_SUFFIXES = ["_deepflow", "_dense_flow", "_motion", "_offline_motion", "_recording_deepflow",
+                 "_recording_dense_flow", "_recording_motion"]
+
+
+def _find_video(csv_path: Path) -> Path | None:
+    """Given a CSV path, locate the companion video by stripping known suffixes."""
+    stem = csv_path.stem  # e.g. "VID_020_deepflow"
+    # Strip known CSV suffixes to recover the video stem
+    base_stem = stem
+    for sfx in _CSV_SUFFIXES:
+        if stem.endswith(sfx):
+            base_stem = stem[: -len(sfx)]
+            break
+    directory = csv_path.parent
+    for ext in [".mp4", ".mkv", ".avi", ".mov", ".MP4", ".MKV", ".AVI", ".MOV"]:
+        candidate = directory / (base_stem + ext)
+        if candidate.is_file():
+            return candidate
+    return None
+
+
 def main():
+    parser = argparse.ArgumentParser(description="CSV Motion/Flow Replay Viewer")
+    parser.add_argument("path", nargs="?", default=None,
+                        help="Path to video file OR CSV file")
+    parser.add_argument("--csv", metavar="CSV",
+                        help="Explicit CSV file (auto-detected if omitted)")
+    args = parser.parse_args()
+
     app = QApplication(sys.argv)
     app.setStyle("Fusion")
 
-    # Get video path
-    if len(sys.argv) > 1:
-        video_path = sys.argv[1]
-    else:
+    explicit_csv: str | None = args.csv
+    video_path: str | None = None
+
+    if args.path:
+        p = Path(args.path)
+        if not p.is_file():
+            print(f"Error: file not found: {p}", file=sys.stderr)
+            sys.exit(1)
+        if p.suffix.lower() == ".csv":
+            # CSV supplied as first arg — locate companion video
+            if explicit_csv is None:
+                explicit_csv = str(p)
+            found_video = _find_video(p)
+            if found_video:
+                video_path = str(found_video)
+                print(f"Auto-detected video: {found_video}")
+            else:
+                print(f"Warning: no companion video found for {p.name}; opening file dialog")
+        else:
+            video_path = str(p)
+
+    if video_path is None:
         dialog = QFileDialog(
             None,
             "Select Recorded Video — only videos with a matching CSV are shown",
@@ -345,23 +493,20 @@ def main():
         sys.exit(1)
 
     # Find companion CSV
-    csv_path = video.with_name(video.stem + "_motion.csv")
-    if not csv_path.is_file():
-        # Try stripping _recording suffix
-        alt_stem = video.stem.replace("_recording", "")
-        csv_path = video.with_name(alt_stem + "_motion.csv")
+    csv_path, csv_fmt = _find_csv(video, explicit_csv)
 
-    if csv_path.is_file():
-        print(f"Loading CSV: {csv_path}")
-        csv_data = load_csv(str(csv_path))
+    if csv_path is not None:
+        print(f"Loading CSV: {csv_path}  (format: {csv_fmt})")
+        csv_data, csv_fmt = load_csv(str(csv_path))
         frames_with_data = len(csv_data)
         total_rows = sum(len(v) for v in csv_data.values())
         print(f"  {total_rows} entries across {frames_with_data} frames")
     else:
-        print(f"Warning: no CSV found (looked for {csv_path.name}), playing video only")
+        print(f"Warning: no CSV found for {video.name}, playing video only")
         csv_data = {}
+        csv_fmt = "motion"
 
-    window = ReplayWindow(str(video), csv_data)
+    window = ReplayWindow(str(video), csv_data, csv_fmt)
     window.show()
     sys.exit(app.exec())
 
