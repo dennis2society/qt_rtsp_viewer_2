@@ -169,13 +169,6 @@ void EffectsSidebar::setupUI()
     m_overlayCheck->setChecked(true);
     lay->addWidget(m_overlayCheck);
 
-    // CSV motion logging
-    m_motionCsvCheck = new QCheckBox(QStringLiteral("Log Motion CSV"));
-    lay->addWidget(m_motionCsvCheck);
-    m_recordCleanVideoCheck = new QCheckBox(QStringLiteral("  Record Clean Video"));
-    m_recordCleanVideoCheck->setVisible(false);
-    lay->addWidget(m_recordCleanVideoCheck);
-
     lay->addWidget(hLine());
 
     // -- Recording ---------------------------------------------------
@@ -193,6 +186,13 @@ void EffectsSidebar::setupUI()
     m_formatCombo->addItem(QStringLiteral("MKV"), QStringLiteral("mkv"));
     m_formatCombo->addItem(QStringLiteral("AVI"), QStringLiteral("avi"));
     lay->addWidget(m_formatCombo);
+
+    // CSV motion logging
+    m_motionCsvCheck = new QCheckBox(QStringLiteral("Log Motion CSV"));
+    lay->addWidget(m_motionCsvCheck);
+    m_recordCleanVideoCheck = new QCheckBox(QStringLiteral("  Record Clean Video"));
+    m_recordCleanVideoCheck->setVisible(false);
+    lay->addWidget(m_recordCleanVideoCheck);
 
     lay->addWidget(hLine());
 
