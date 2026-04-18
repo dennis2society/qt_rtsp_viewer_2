@@ -189,6 +189,7 @@ void EffectsSidebar::setupUI()
 
     // CSV motion logging
     m_motionCsvCheck = new QCheckBox(QStringLiteral("Log Motion CSV"));
+    m_motionCsvCheck->setToolTip(QStringLiteral("Logs motion events to a CSV file in the output folder (only during recording)"));
     lay->addWidget(m_motionCsvCheck);
     m_recordCleanVideoCheck = new QCheckBox(QStringLiteral("  Record Clean Video"));
     m_recordCleanVideoCheck->setVisible(false);
