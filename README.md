@@ -4,11 +4,7 @@ This is a Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, *
 ![Screenshot](qt_rtsp_viewer_screenshot_blurred.jpg)
 
 ## Disclaimer
-**This project is mostly AI generated** by throwing some more or less complex prompts at Github Copilot. Making the initial version
-took about 6 hours with a few very long and specific prompts for 
-Claude Opus 4.6 to generate project structure and most of the 
-implementation, and a long series of shorter prompts for Claude 
-Haiku/Sonnet 4.5/4.6 to get some quirks right.
+**This project is partially AI generated** (mostly optimizations and the video recording functionality) by throwing some more or less complex prompts at Github Copilot. 
 
 **Considering this, it works impressively well.**
 
