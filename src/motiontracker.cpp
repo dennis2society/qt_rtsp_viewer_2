@@ -4,16 +4,16 @@
 #include <cmath>
 #include <limits>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void MotionTracker::reset()
 {
     m_tracks.clear();
     m_nextId = 1;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Kalman filter helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 MotionTracker::Track MotionTracker::createTrack(int id, const QRect &bbox)
 {
     Track t;
@@ -38,9 +38,9 @@ MotionTracker::Track MotionTracker::createTrack(int id, const QRect &bbox)
     t.kf.measurementMatrix.at<float>(2, 2) = 1.0f;
     t.kf.measurementMatrix.at<float>(3, 3) = 1.0f;
 
-    // Process noise — moderate, allows tracking through brief jumps
+    // Process noise - moderate, allows tracking through brief jumps
     cv::setIdentity(t.kf.processNoiseCov, cv::Scalar(1e-1));
-    // Measurement noise — moderate, trusts measurements reasonably
+    // Measurement noise - moderate, trusts measurements reasonably
     cv::setIdentity(t.kf.measurementNoiseCov, cv::Scalar(5e-1));
     // Initial error covariance
     cv::setIdentity(t.kf.errorCovPost, cv::Scalar(1.0));
@@ -90,7 +90,7 @@ void MotionTracker::Track::correct(const QRect &meas)
     kf.correct(m);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 double MotionTracker::iou(const QRect &a, const QRect &b)
 {
     int x1 = std::max(a.left(), b.left());
@@ -105,9 +105,9 @@ double MotionTracker::iou(const QRect &a, const QRect &b)
     return inter / (areaA + areaB - inter);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main update: predict → match → correct → create/remove
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Main update: predict -> match -> correct -> create/remove
+// -----------------------------------------------------------------------------
 QVector<MotionTracker::TrackedObject> MotionTracker::update(const QVector<QRect> &detections)
 {
     // 1. Predict all existing tracks

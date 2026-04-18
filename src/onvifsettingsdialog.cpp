@@ -19,7 +19,7 @@
 #include <QUrl>
 #include <QVBoxLayout>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 OnvifSettingsDialog::OnvifSettingsDialog(int streamId, QWidget *parent)
     : QDialog(parent)
     , m_streamId(streamId)
@@ -33,12 +33,12 @@ OnvifSettingsDialog::OnvifSettingsDialog(int streamId, QWidget *parent)
     setImagingUIEnabled(false);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OnvifSettingsDialog::setupUI()
 {
     auto *mainLay = new QVBoxLayout(this);
 
-    // ── Connection group ────────────────────────────────────────────
+    // -- Connection group --------------------------------------------
     auto *connGroup = new QGroupBox(QStringLiteral("Connection"));
     auto *connLay = new QGridLayout(connGroup);
 
@@ -80,7 +80,7 @@ void OnvifSettingsDialog::setupUI()
 
     mainLay->addWidget(connGroup);
 
-    // ── Imaging settings group ──────────────────────────────────────
+    // -- Imaging settings group --------------------------------------
     m_imagingGroup = new QGroupBox(QStringLiteral("Imaging Settings"));
     auto *imgLay = new QGridLayout(m_imagingGroup);
     int row = 0;
@@ -89,7 +89,7 @@ void OnvifSettingsDialog::setupUI()
         label = new QLabel(text);
         slider = new QSlider(Qt::Horizontal);
         slider->setRange(0, 100);
-        valLabel = new QLabel(QStringLiteral("—"));
+        valLabel = new QLabel(QStringLiteral("-"));
         valLabel->setMinimumWidth(30);
         valLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         imgLay->addWidget(label, row, 0);
@@ -118,7 +118,7 @@ void OnvifSettingsDialog::setupUI()
     m_backlightCheck = new QCheckBox(QStringLiteral("Backlight Compensation"));
     m_backlightSlider = new QSlider(Qt::Horizontal);
     m_backlightSlider->setRange(0, 100);
-    m_backlightVal = new QLabel(QStringLiteral("—"));
+    m_backlightVal = new QLabel(QStringLiteral("-"));
     m_backlightVal->setMinimumWidth(30);
     m_backlightVal->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     imgLay->addWidget(m_backlightCheck, row, 0);
@@ -133,7 +133,7 @@ void OnvifSettingsDialog::setupUI()
     m_wdrCheck = new QCheckBox(QStringLiteral("Wide Dynamic Range"));
     m_wdrSlider = new QSlider(Qt::Horizontal);
     m_wdrSlider->setRange(0, 100);
-    m_wdrVal = new QLabel(QStringLiteral("—"));
+    m_wdrVal = new QLabel(QStringLiteral("-"));
     m_wdrVal->setMinimumWidth(30);
     m_wdrVal->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     imgLay->addWidget(m_wdrCheck, row, 0);
@@ -144,7 +144,7 @@ void OnvifSettingsDialog::setupUI()
     });
     ++row;
 
-    // ── Exposure group ──────────────────────────────────────────────
+    // -- Exposure group ----------------------------------------------
     m_exposureModeLabel = new QLabel(QStringLiteral("Exposure Mode:"));
     m_exposureModeCombo = new QComboBox;
     m_exposureModeCombo->addItems({QStringLiteral("AUTO"), QStringLiteral("MANUAL")});
@@ -156,7 +156,7 @@ void OnvifSettingsDialog::setupUI()
         label = new QLabel(text);
         slider = new QSlider(Qt::Horizontal);
         slider->setRange(0, 100);
-        valLabel = new QLabel(QStringLiteral("—"));
+        valLabel = new QLabel(QStringLiteral("-"));
         valLabel->setMinimumWidth(50);
         valLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
         imgLay->addWidget(label, row, 0);
@@ -174,7 +174,7 @@ void OnvifSettingsDialog::setupUI()
     addExpSlider(QStringLiteral("Gain:"), m_gainLabel, m_gainSlider, m_gainVal);
     addExpSlider(QStringLiteral("Iris:"), m_irisLabel, m_irisSlider, m_irisVal);
 
-    // ── White Balance ───────────────────────────────────────────────
+    // -- White Balance -----------------------------------------------
     m_wbModeLabel = new QLabel(QStringLiteral("White Balance:"));
     m_wbModeCombo = new QComboBox;
     m_wbModeCombo->addItems({QStringLiteral("AUTO"), QStringLiteral("MANUAL")});
@@ -184,7 +184,7 @@ void OnvifSettingsDialog::setupUI()
 
     mainLay->addWidget(m_imagingGroup);
 
-    // ── Buttons ─────────────────────────────────────────────────────
+    // -- Buttons -----------------------------------------------------
     auto *btnLay = new QHBoxLayout;
     m_refreshBtn = new QPushButton(QStringLiteral("Refresh"));
     m_refreshBtn->setEnabled(false);
@@ -197,7 +197,7 @@ void OnvifSettingsDialog::setupUI()
     btnLay->addWidget(m_closeBtn);
     mainLay->addLayout(btnLay);
 
-    // ── Log area ───────────────────────────────────────────────────
+    // -- Log area ---------------------------------------------------
     auto *logGroup = new QGroupBox(QStringLiteral("SOAP Log"));
     logGroup->setCheckable(true);
     logGroup->setChecked(false);
@@ -211,7 +211,7 @@ void OnvifSettingsDialog::setupUI()
     mainLay->addWidget(logGroup, 1);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OnvifSettingsDialog::connectSignals()
 {
     connect(m_connectBtn, &QPushButton::clicked, this, &OnvifSettingsDialog::onConnect);
@@ -236,13 +236,13 @@ void OnvifSettingsDialog::connectSignals()
         m_servicesLabel->setVisible(true);
 
         if (!caps.hasMedia) {
-            m_statusLabel->setText(QStringLiteral("Connected — no Media service available"));
+            m_statusLabel->setText(QStringLiteral("Connected - no Media service available"));
             m_statusLabel->setStyleSheet(QStringLiteral("color:orange;"));
             m_connectBtn->setEnabled(true);
             return;
         }
 
-        m_statusLabel->setText(QStringLiteral("Fetching video sources…"));
+        m_statusLabel->setText(QStringLiteral("Fetching video sources..."));
         m_client->fetchVideoSources(caps.mediaXAddr, m_userEdit->text(), m_passEdit->text());
     });
 
@@ -257,14 +257,14 @@ void OnvifSettingsDialog::connectSignals()
         m_videoSourceToken = tokens.first();
 
         if (!m_caps.hasImaging) {
-            m_statusLabel->setText(QStringLiteral("Connected — no Imaging service available"));
+            m_statusLabel->setText(QStringLiteral("Connected - no Imaging service available"));
             m_statusLabel->setStyleSheet(QStringLiteral("color:orange;"));
             m_connectBtn->setEnabled(true);
             saveCredentials();
             return;
         }
 
-        m_statusLabel->setText(QStringLiteral("Fetching imaging settings…"));
+        m_statusLabel->setText(QStringLiteral("Fetching imaging settings..."));
         m_gotSettings = false;
         m_gotOptions = false;
         m_client->fetchImagingSettings(m_caps.imagingXAddr, m_videoSourceToken, m_userEdit->text(), m_passEdit->text());
@@ -324,10 +324,10 @@ void OnvifSettingsDialog::connectSignals()
     });
 
     connect(m_client, &OnvifClient::imagingSettingsApplied, this, [this]() {
-        m_statusLabel->setText(QStringLiteral("Set request accepted — verifying\u2026"));
+        m_statusLabel->setText(QStringLiteral("Set request accepted - verifying\u2026"));
         m_statusLabel->setStyleSheet(QStringLiteral("color:gray;"));
         m_logEdit->append(QStringLiteral("\u2713 SetImagingSettings response received OK"));
-        // Re-read settings from camera to verify — wait 500 ms for the
+        // Re-read settings from camera to verify - wait 500 ms for the
         // camera to actually commit the values before reading back.
         m_applyRefreshPending = true;
         m_gotSettings = false;
@@ -348,7 +348,7 @@ void OnvifSettingsDialog::connectSignals()
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OnvifSettingsDialog::onConnect()
 {
     QString host = m_hostEdit->text().trimmed();
@@ -359,7 +359,7 @@ void OnvifSettingsDialog::onConnect()
     }
 
     m_connectBtn->setEnabled(false);
-    m_statusLabel->setText(QStringLiteral("Connecting…"));
+    m_statusLabel->setText(QStringLiteral("Connecting..."));
     m_statusLabel->setStyleSheet(QStringLiteral("color:gray;"));
     m_servicesLabel->setVisible(false);
     setImagingUIEnabled(false);
@@ -376,7 +376,7 @@ void OnvifSettingsDialog::onApply()
         return;
 
     m_applyBtn->setEnabled(false);
-    m_statusLabel->setText(QStringLiteral("Applying settings…"));
+    m_statusLabel->setText(QStringLiteral("Applying settings..."));
     m_statusLabel->setStyleSheet(QStringLiteral("color:gray;"));
 
     OnvifImagingSettings s = gatherSettings();
@@ -405,7 +405,7 @@ void OnvifSettingsDialog::onRefresh()
 
     m_refreshBtn->setEnabled(false);
     m_applyBtn->setEnabled(false);
-    m_statusLabel->setText(QStringLiteral("Refreshing settings…"));
+    m_statusLabel->setText(QStringLiteral("Refreshing settings..."));
     m_statusLabel->setStyleSheet(QStringLiteral("color:gray;"));
 
     m_gotSettings = false;
@@ -414,7 +414,7 @@ void OnvifSettingsDialog::onRefresh()
     m_client->fetchImagingOptions(m_caps.imagingXAddr, m_videoSourceToken, m_userEdit->text(), m_passEdit->text());
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OnvifSettingsDialog::loadCredentials()
 {
     // Pre-fill from the stream's RTSP URL
@@ -450,7 +450,7 @@ void OnvifSettingsDialog::loadCredentials()
 
     // Set dialog title to include camera name
     if (!st.cameraName.isEmpty())
-        setWindowTitle(QStringLiteral("ONVIF Settings — %1").arg(st.cameraName));
+        setWindowTitle(QStringLiteral("ONVIF Settings - %1").arg(st.cameraName));
 }
 
 void OnvifSettingsDialog::saveCredentials()
@@ -470,7 +470,7 @@ void OnvifSettingsDialog::saveCredentials()
     settings.sync();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OnvifSettingsDialog::setImagingUIEnabled(bool enabled)
 {
     m_imagingGroup->setEnabled(enabled);
@@ -615,7 +615,7 @@ OnvifImagingSettings OnvifSettingsDialog::gatherSettings() const
         s.wdrLevel = m_wdrSlider->value();
     }
 
-    // Exposure – always send current mode so camera doesn't reset to defaults
+    // Exposure - always send current mode so camera doesn't reset to defaults
     if (m_exposureModeCombo->isVisible()) {
         s.exposureMode = m_exposureModeCombo->currentText();
         // Preserve AUTO-mode limits from what the camera reported

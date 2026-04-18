@@ -16,7 +16,7 @@ class QTimer;
 
 /// Lives on a dedicated QThread.  Receives raw QVideoFrames, applies the
 /// full effects pipeline, and emits composited QImages.  Recording is handled
-/// by a separate RecordingWorker on its own thread — this class only forwards
+/// by a separate RecordingWorker on its own thread - this class only forwards
 /// frames via the frameForRecording signal.
 ///
 /// Frame delivery uses a "latest frame" pattern: incoming frames are stored
@@ -32,13 +32,13 @@ public:
 
 public slots:
     /// Called from the multimedia thread (DirectConnection).  Stores the
-    /// frame and returns immediately — no heavy processing here.
+    /// frame and returns immediately - no heavy processing here.
     void submitFrame(const QVideoFrame &frame);
 
     void setStreamActive(bool active);
     void resetStream(); // clears inter-frame state when URL changes
 
-    // ── recording state (kept for auto-record logic) ────────────────
+    // -- recording state (kept for auto-record logic) ----------------
     void setRecording(bool on, const QString &recPath = QString());
 
 signals:
@@ -48,7 +48,7 @@ signals:
     /// RecordingWorker::enqueueFrame across threads (queued connection).
     void frameForRecording(const QImage &image);
 
-    /// Auto-record requests — connected to RecordingWorker via VideoPlayer
+    /// Auto-record requests - connected to RecordingWorker via VideoPlayer
     void startRecordingRequested(const QString &path, const QString &codec, double fps);
     void stopRecordingRequested();
 
@@ -77,30 +77,30 @@ private:
 
     // Clean-frame bookkeeping is now managed by OpenCVProcessor
 
-    // Timer that drives frame processing — started/stopped with stream activity
+    // Timer that drives frame processing - started/stopped with stream activity
     QTimer *m_processTimer = nullptr;
 
-    // ── Latest-frame storage (written by multimedia thread) ─────────
+    // -- Latest-frame storage (written by multimedia thread) ---------
     QMutex m_frameMutex;
     QVideoFrame m_pendingFrame;
     std::atomic<bool> m_hasNewFrame{false};
 
-    // ── Recording awareness (no FFmpeg) ─────────────────────────────
+    // -- Recording awareness (no FFmpeg) -----------------------------
     bool m_recording = false;
     QString m_recPath;
     QString m_recCodec;
     double m_recFps = 25.0;
 
-    // ── CSV motion logging ──────────────────────────────────────────
+    // -- CSV motion logging ------------------------------------------
     MotionLogger *m_motionLogger = nullptr;
     qint64 m_logFrameNumber = 0;
     QDateTime m_logStartTime;
 
-    // ── Kalman-filter trackers ──────────────────────────────────────
+    // -- Kalman-filter trackers --------------------------------------
     MotionTracker *m_detTracker = nullptr; // detection blobs
     MotionTracker *m_vecTracker = nullptr; // vector blobs
 
-    // ── Auto-record ─────────────────────────────────────────────────
+    // -- Auto-record -------------------------------------------------
     bool m_autoRecording = false;
     QDateTime m_autoRecStartTime;
     qint64 m_lastMotionAboveMs = 0;

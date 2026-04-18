@@ -10,16 +10,16 @@
 #include <QUrl>
 #include <QXmlStreamReader>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 OnvifClient::OnvifClient(QObject *parent)
     : QObject(parent)
     , m_nam(new QNetworkAccessManager(this))
 {
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // SOAP helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 QByteArray OnvifClient::buildSecurityHeader(const QString &user, const QString &pass) const
 {
     if (user.isEmpty())
@@ -77,7 +77,7 @@ void OnvifClient::postSoap(const QUrl &url, const QByteArray &soap, const QByteA
     qDebug() << "[ONVIF] POST" << url.toString();
     qDebug() << "[ONVIF] Request body:" << soap.left(2000);
 
-    emit soapLog(QStringLiteral("→ POST %1  action=%2  (%3 bytes)").arg(url.toString(), QString::fromLatin1(soapAction)).arg(soap.size()));
+    emit soapLog(QStringLiteral("-> POST %1  action=%2  (%3 bytes)").arg(url.toString(), QString::fromLatin1(soapAction)).arg(soap.size()));
     emit soapLog(QString::fromUtf8(soap));
 
     QNetworkRequest req(url);
@@ -94,7 +94,7 @@ void OnvifClient::postSoap(const QUrl &url, const QByteArray &soap, const QByteA
         qDebug() << "[ONVIF] Response HTTP" << httpStatus << "size:" << body.size();
         qDebug() << "[ONVIF] Response body:" << body.left(2000);
 
-        emit soapLog(QStringLiteral("← HTTP %1  (%2 bytes)").arg(httpStatus).arg(body.size()));
+        emit soapLog(QStringLiteral("<- HTTP %1  (%2 bytes)").arg(httpStatus).arg(body.size()));
 
         if (reply->error() != QNetworkReply::NoError) {
             QString fault = parseSoapFault(body);
@@ -112,9 +112,9 @@ void OnvifClient::postSoap(const QUrl &url, const QByteArray &soap, const QByteA
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Public API
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OnvifClient::fetchCapabilities(const QString &host, quint16 port, const QString &user, const QString &pass)
 {
     QUrl url;
@@ -203,7 +203,7 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
     if (settings.contrast)
         inner += QStringLiteral("<tt:Contrast>%1</tt:Contrast>").arg(*settings.contrast, 0, 'f', 1);
 
-    // Exposure – must appear between Contrast and IrCutFilter per schema order
+    // Exposure - must appear between Contrast and IrCutFilter per schema order
     if (!settings.exposureMode.isEmpty()) {
         QString exp = QStringLiteral("<tt:Mode>%1</tt:Mode>").arg(settings.exposureMode);
         if (!settings.exposurePriority.isEmpty())
@@ -243,7 +243,7 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
                      .arg(*settings.wdrLevel, 0, 'f', 1);
     }
 
-    // WhiteBalance – per schema order, after WideDynamicRange
+    // WhiteBalance - per schema order, after WideDynamicRange
     if (!settings.whiteBalanceMode.isEmpty()) {
         QString wb = QStringLiteral("<tt:Mode>%1</tt:Mode>").arg(settings.whiteBalanceMode);
         if (settings.crGain)
@@ -266,7 +266,7 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
         emit soapLog(QStringLiteral("Set response (%1 B): %2").arg(data.size()).arg(QString::fromUtf8(data.left(500))));
         if (!data.contains("SetImagingSettingsResponse")) {
             emit queryFailed(
-                QStringLiteral("Camera did not return SetImagingSettingsResponse — "
+                QStringLiteral("Camera did not return SetImagingSettingsResponse - "
                                "possible authentication/permission failure. "
                                "Check credentials and user role on the camera."));
             return;
@@ -275,15 +275,15 @@ void OnvifClient::applyImagingSettings(const QString &imagingXAddr,
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Parsers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 QString OnvifClient::parseSoapFault(const QByteArray &data)
 {
     QXmlStreamReader xml(data);
     bool inFault = false;
-    QString reasonText; // from <Reason><Text>…</Text></Reason> or <faultstring>
-    QString codeValue; // from <Code><Value>…</Value></Code>
+    QString reasonText; // from <Reason><Text>...</Text></Reason> or <faultstring>
+    QString codeValue; // from <Code><Value>...</Value></Code>
 
     while (!xml.atEnd()) {
         xml.readNext();

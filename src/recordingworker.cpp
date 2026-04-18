@@ -5,7 +5,7 @@
 #include <iostream>
 #include <string>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 RecordingWorker::RecordingWorker(QObject *parent)
     : QObject(parent)
 {
@@ -25,9 +25,9 @@ RecordingWorker::~RecordingWorker()
 #endif
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Called cross-thread (from VideoWorker) — must be fast
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Called cross-thread (from VideoWorker) - must be fast
+// -----------------------------------------------------------------------------
 void RecordingWorker::enqueueFrame(const QImage &image)
 {
     if (!m_recording)
@@ -37,10 +37,10 @@ void RecordingWorker::enqueueFrame(const QImage &image)
     if (m_queue.size() >= kMaxQueueSize) {
         m_queue.dequeue(); // drop oldest to keep memory bounded
     }
-    m_queue.enqueue(image.copy()); // deep copy — source may be transient
+    m_queue.enqueue(image.copy()); // deep copy - source may be transient
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void RecordingWorker::startRecording(const QString &path, const QString &codec, double fps)
 {
 #ifdef HAVE_FFMPEG
@@ -65,7 +65,7 @@ void RecordingWorker::startRecording(const QString &path, const QString &codec, 
 #endif
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void RecordingWorker::stopRecording()
 {
 #ifdef HAVE_FFMPEG
@@ -107,9 +107,9 @@ void RecordingWorker::stopRecording()
 #endif
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Timer-driven encode loop – runs on the recorder thread
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Timer-driven encode loop - runs on the recorder thread
+// -----------------------------------------------------------------------------
 void RecordingWorker::processQueue()
 {
 #ifdef HAVE_FFMPEG
@@ -133,9 +133,9 @@ void RecordingWorker::processQueue()
 #endif
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // FFmpeg internals
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 #ifdef HAVE_FFMPEG
 
 bool RecordingWorker::openRecorder(int w, int h)
@@ -144,7 +144,7 @@ bool RecordingWorker::openRecorder(int w, int h)
     if (ret < 0 || !m_fmtCtx)
         return false;
 
-    // ── Codec selection: always prefer HW (NVENC → VAAPI → QSV) over SW ──
+    // -- Codec selection: always prefer HW (NVENC -> VAAPI -> QSV) over SW --
     const AVCodec *codec = nullptr;
 
     // Determine whether the user picked h264 or hevc family
@@ -200,7 +200,7 @@ bool RecordingWorker::openRecorder(int w, int h)
     m_codecCtx->framerate = {static_cast<int>(m_recFps), 1};
     m_codecCtx->pix_fmt = AV_PIX_FMT_YUV420P;
 
-    // ── Encoder-specific tuning ────────────────────────────────────
+    // -- Encoder-specific tuning ------------------------------------
     std::string codecName(codec->name);
     bool isNvenc = codecName.find("nvenc") != std::string::npos;
     bool isVaapi = codecName.find("vaapi") != std::string::npos;
@@ -235,7 +235,7 @@ bool RecordingWorker::openRecorder(int w, int h)
 
     ret = avcodec_open2(m_codecCtx, codec, nullptr);
     if (ret < 0) {
-        qWarning() << "[RecordingWorker] Failed to open encoder:" << codec->name << " – error" << ret;
+        qWarning() << "[RecordingWorker] Failed to open encoder:" << codec->name << " - error" << ret;
         // If a HW encoder failed, try libx264 as last resort
         if (isNvenc || isVaapi || isQsv) {
             avcodec_free_context(&m_codecCtx);

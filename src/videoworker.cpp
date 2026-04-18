@@ -13,7 +13,7 @@
 
 #include <opencv2/imgproc.hpp>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 VideoWorker::VideoWorker(int streamId, QObject *parent)
     : QObject(parent)
     , m_streamId(streamId)
@@ -40,9 +40,9 @@ VideoWorker::~VideoWorker()
     delete m_vecTracker;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Slots
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void VideoWorker::setStreamActive(bool a)
 {
     m_streamActive = a;
@@ -66,9 +66,9 @@ void VideoWorker::resetStream()
     m_processor->reset();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Frame submission (runs on multimedia thread — must be fast)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Frame submission (runs on multimedia thread - must be fast)
+// -----------------------------------------------------------------------------
 void VideoWorker::submitFrame(const QVideoFrame &frame)
 {
     // Atomically store the latest frame; previous unprocessed frame is discarded.
@@ -77,9 +77,9 @@ void VideoWorker::submitFrame(const QVideoFrame &frame)
     m_hasNewFrame.store(true, std::memory_order_release);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Timer-driven: grab latest frame and process it
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void VideoWorker::processPendingFrame()
 {
     if (!m_hasNewFrame.load(std::memory_order_acquire))
@@ -96,9 +96,9 @@ void VideoWorker::processPendingFrame()
     processFrame(frame);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Core frame pipeline
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void VideoWorker::processFrame(const QVideoFrame &frame)
 {
     if (!m_streamActive)
@@ -113,7 +113,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
         m_fpsTimer = QDateTime::currentDateTime();
     }
 
-    // Convert QVideoFrame → QImage → BGR cv::Mat (once)
+    // Convert QVideoFrame -> QImage -> BGR cv::Mat (once)
     QVideoFrame f(frame);
     f.map(QVideoFrame::ReadOnly);
     QImage rawImage = f.toImage();
@@ -121,7 +121,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
     if (rawImage.isNull())
         return;
 
-    // ── Read effect state (thread-safe snapshot) ────────────────────
+    // -- Read effect state (thread-safe snapshot) --------------------
     StreamState st;
     StreamStateManager::instance().readState(m_streamId, [&](const StreamState &s) {
         st = s;
@@ -168,7 +168,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
             m_processor->applyGaussBlur(bgr, st.blurAmount);
     }
 
-    // 5. Prepare for detection — compute gray/BGR snapshots only if needed
+    // 5. Prepare for detection - compute gray/BGR snapshots only if needed
     bool needsMotion = st.motionDetectionEnabled || st.motionVectorsEnabled || st.motionGraphEnabled || st.autoRecordEnabled;
     bool needsFace = st.faceDetectionEnabled;
 
@@ -178,7 +178,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
     if (needsMotion)
         cv::cvtColor(bgr, cleanGray, cv::COLOR_BGR2GRAY);
 
-    // 6. Convert BGR → QImage (once)
+    // 6. Convert BGR -> QImage (once)
     QImage image = m_processor->bgrToQImage(bgr);
 
     // 7. Spike detection via frame history
@@ -191,7 +191,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     const cv::Mat &refGray = m_processor->referenceGray();
 
-    // ── CSV motion logging setup ────────────────────────────────────
+    // -- CSV motion logging setup ------------------------------------
     bool csvActive = m_recording && st.motionCsvEnabled;
     bool recordClean = m_recording && st.recordCleanVideo;
 
@@ -247,7 +247,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
             motionLevel = m_processor->computeMotionLevel(cleanGray, refGray, st.motionGraphSensitivity);
     }
 
-    // ── Kalman-filter tracking ──────────────────────────────────────
+    // -- Kalman-filter tracking --------------------------------------
     if (csvActive) {
         // Update detection tracker
         if (!detBlobs.isEmpty()) {
@@ -291,7 +291,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
         }
     }
 
-    // ── Write CSV row(s) for this frame ─────────────────────────────
+    // -- Write CSV row(s) for this frame -----------------------------
     if (csvActive && m_motionLogger->isOpen() && (!detBlobs.isEmpty() || !vecBlobs.isEmpty())) {
         double tsSec = m_logStartTime.msecsTo(QDateTime::currentDateTime()) / 1000.0;
         m_motionLogger->logFrame(m_logFrameNumber, tsSec, m_fps, detBlobs, vecBlobs);
@@ -330,9 +330,9 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
     emit frameReady(image);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // FPS / resolution / datetime overlay
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void VideoWorker::paintFpsOverlay(QImage &img)
 {
     QPainter p(&img);
@@ -340,7 +340,7 @@ void VideoWorker::paintFpsOverlay(QImage &img)
     p.setFont(QFont(QStringLiteral("Monospace"), 13, QFont::Bold));
 
     QString fps = QStringLiteral("FPS: %1").arg(m_fps, 0, 'f', 1);
-    QString res = QStringLiteral("Res: %1×%2").arg(img.width()).arg(img.height());
+    QString res = QStringLiteral("Res: %1x%2").arg(img.width()).arg(img.height());
     QString dt = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
 
     int x = img.width() - 240, y = 20;
@@ -355,9 +355,9 @@ void VideoWorker::paintFpsOverlay(QImage &img)
     p.end();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Auto-record on motion
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void VideoWorker::handleAutoRecord(double motionLevel)
 {
     StreamState st;
@@ -368,7 +368,7 @@ void VideoWorker::handleAutoRecord(double motionLevel)
     qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
 
     if (motionLevel >= st.autoRecordThreshold) {
-        // Reset the timeout countdown – keeps recording alive while motion
+        // Reset the timeout countdown - keeps recording alive while motion
         // continues to exceed the threshold (ensures continuous recording).
         m_lastMotionAboveMs = nowMs;
 
@@ -405,7 +405,7 @@ void VideoWorker::handleAutoRecord(double motionLevel)
     if (m_autoRecording) {
         int timeoutMs = st.autoRecordTimeout * 1000;
         if (nowMs - m_lastMotionAboveMs > timeoutMs) {
-            // Motion below threshold for the full timeout → stop
+            // Motion below threshold for the full timeout -> stop
             QString path = m_recPath;
             m_recording = false;
             m_autoRecording = false;

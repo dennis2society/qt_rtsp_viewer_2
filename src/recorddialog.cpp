@@ -14,21 +14,21 @@
 #include <QRegularExpression>
 #include <QVBoxLayout>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 const QList<RecordDialog::Preset> RecordDialog::s_presets = {
-    {QStringLiteral("MP4 – H.264 (NVENC)"), QStringLiteral("mp4"), QStringLiteral("h264_nvenc")},
-    {QStringLiteral("MP4 – H.265/HEVC (NVENC)"), QStringLiteral("mp4"), QStringLiteral("hevc_nvenc")},
-    {QStringLiteral("MP4 – H.264 (auto)"), QStringLiteral("mp4"), QStringLiteral("libx264")},
-    {QStringLiteral("MP4 – H.265/HEVC (auto)"), QStringLiteral("mp4"), QStringLiteral("libx265")},
-    {QStringLiteral("MKV – H.264 (NVENC)"), QStringLiteral("mkv"), QStringLiteral("h264_nvenc")},
-    {QStringLiteral("MKV – H.265/HEVC (NVENC)"), QStringLiteral("mkv"), QStringLiteral("hevc_nvenc")},
-    {QStringLiteral("MKV – H.264 (auto)"), QStringLiteral("mkv"), QStringLiteral("libx264")},
-    {QStringLiteral("MKV – H.265/HEVC (auto)"), QStringLiteral("mkv"), QStringLiteral("libx265")},
-    {QStringLiteral("AVI – H.264 (NVENC)"), QStringLiteral("avi"), QStringLiteral("h264_nvenc")},
-    {QStringLiteral("AVI – H.264 (auto)"), QStringLiteral("avi"), QStringLiteral("libx264")},
+    {QStringLiteral("MP4 - H.264 (NVENC)"), QStringLiteral("mp4"), QStringLiteral("h264_nvenc")},
+    {QStringLiteral("MP4 - H.265/HEVC (NVENC)"), QStringLiteral("mp4"), QStringLiteral("hevc_nvenc")},
+    {QStringLiteral("MP4 - H.264 (auto)"), QStringLiteral("mp4"), QStringLiteral("libx264")},
+    {QStringLiteral("MP4 - H.265/HEVC (auto)"), QStringLiteral("mp4"), QStringLiteral("libx265")},
+    {QStringLiteral("MKV - H.264 (NVENC)"), QStringLiteral("mkv"), QStringLiteral("h264_nvenc")},
+    {QStringLiteral("MKV - H.265/HEVC (NVENC)"), QStringLiteral("mkv"), QStringLiteral("hevc_nvenc")},
+    {QStringLiteral("MKV - H.264 (auto)"), QStringLiteral("mkv"), QStringLiteral("libx264")},
+    {QStringLiteral("MKV - H.265/HEVC (auto)"), QStringLiteral("mkv"), QStringLiteral("libx265")},
+    {QStringLiteral("AVI - H.264 (NVENC)"), QStringLiteral("avi"), QStringLiteral("h264_nvenc")},
+    {QStringLiteral("AVI - H.264 (auto)"), QStringLiteral("avi"), QStringLiteral("libx264")},
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 RecordDialog::RecordDialog(const QString &defaultDir, const QString &cameraName, QWidget *parent)
     : QDialog(parent)
 {
@@ -50,7 +50,7 @@ void RecordDialog::setupUI(const QString &defaultDir, const QString &cameraName)
     // Output path
     auto *pathRow = new QHBoxLayout;
     m_pathEdit = new QLineEdit;
-    auto *browseBtn = new QPushButton(QStringLiteral("Browse…"));
+    auto *browseBtn = new QPushButton(QStringLiteral("Browse..."));
     pathRow->addWidget(m_pathEdit, 1);
     pathRow->addWidget(browseBtn);
     form->addRow(QStringLiteral("Output file:"), pathRow);

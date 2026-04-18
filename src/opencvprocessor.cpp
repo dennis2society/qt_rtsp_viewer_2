@@ -10,7 +10,7 @@
 #include <cmath>
 #include <numeric>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 OpenCVProcessor::OpenCVProcessor()
 {
     m_cellLevels.resize(kGridCols * kGridRows, 0.0);
@@ -36,9 +36,9 @@ void OpenCVProcessor::reset()
     m_detectionTraces.clear();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Conversion helpers
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 cv::Mat OpenCVProcessor::qImageToBGR(const QImage &img)
 {
     QImage tmp = img;
@@ -50,7 +50,7 @@ cv::Mat OpenCVProcessor::qImageToBGR(const QImage &img)
                 tmp.format() == QImage::Format_Grayscale8 ? CV_8UC1 : CV_8UC3,
                 const_cast<uchar *>(tmp.constBits()),
                 static_cast<size_t>(tmp.bytesPerLine()));
-    mat.copyTo(m_srcMat); // deep copy – detaches from QImage
+    mat.copyTo(m_srcMat); // deep copy - detaches from QImage
     if (m_srcMat.channels() == 3)
         cv::cvtColor(m_srcMat, m_srcMat, cv::COLOR_RGB2BGR);
     return m_srcMat;
@@ -65,9 +65,9 @@ QImage OpenCVProcessor::bgrToQImage(const cv::Mat &bgr)
     return QImage(bgr.data, bgr.cols, bgr.rows, static_cast<int>(bgr.step), QImage::Format_Grayscale8).copy();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Blur (in-place on BGR cv::Mat)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OpenCVProcessor::applyGaussBlur(cv::Mat &bgr, int amount)
 {
     if (amount <= 0)
@@ -89,9 +89,9 @@ void OpenCVProcessor::applyGaussBlur(cv::UMat &bgr, int amount)
     cv::swap(bgr, tmp);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Brightness / Contrast (in-place on BGR cv::Mat)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OpenCVProcessor::applyBrightnessContrast(cv::Mat &bgr, int brightness, int contrast)
 {
     if (brightness == 0 && contrast == 0)
@@ -123,9 +123,9 @@ void OpenCVProcessor::applyBrightnessContrast(cv::UMat &bgr, int brightness, int
     bgr.convertTo(bgr, -1, alpha, beta);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Colour temperature (in-place on BGR cv::Mat)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OpenCVProcessor::applyColorTemperature(cv::Mat &bgr, int temperature)
 {
     if (temperature == 0)
@@ -162,9 +162,9 @@ void OpenCVProcessor::applyColorTemperature(cv::UMat &bgr, int temperature)
     cv::merge(chs, bgr);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Spike detection with frame-history reference selection
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 bool OpenCVProcessor::pushGrayFrame(const cv::Mat &grayCur)
 {
     FrameRecord rec;
@@ -175,7 +175,7 @@ bool OpenCVProcessor::pushGrayFrame(const cv::Mat &grayCur)
     if (!m_frameHistory.empty()) {
         const cv::Mat &prev = m_frameHistory.back().gray;
         if (grayCur.size() != prev.size()) {
-            // Resolution change — reset history
+            // Resolution change - reset history
             m_frameHistory.clear();
             m_globalDiffEma = -1.0;
             m_referenceGray = cv::Mat{};
@@ -198,7 +198,7 @@ bool OpenCVProcessor::pushGrayFrame(const cv::Mat &grayCur)
         rec.spike = (globalDiff > kSpikeMultiplier * m_globalDiffEma) && (m_globalDiffEma > 0.002);
 
         // Also check against the median diff of recent history for extra robustness:
-        // if this frame's diff is > 3× the median of non-spike history diffs, flag it
+        // if this frame's diff is > 3x the median of non-spike history diffs, flag it
         if (!rec.spike && m_frameHistory.size() >= 3) {
             std::vector<double> recentDiffs;
             for (const auto &fr : m_frameHistory)
@@ -253,9 +253,9 @@ double OpenCVProcessor::decayMotionLevels()
     return std::min(0.6 * maxCell + 0.4 * (sumCell / (kGridCols * kGridRows)), 1.0);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Motion detection overlay (contour-based, clustered bounding boxes)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
                                                   const cv::Mat &grayCur,
                                                   const cv::Mat &grayPrev,
@@ -267,7 +267,7 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
 {
     int thresh = std::max(1, 100 - sensitivity);
 
-    // ── 1. Threshold the inter-frame difference ──────────────────────────────
+    // -- 1. Threshold the inter-frame difference ------------------------------
     if (m_haveOpenCL) {
         cv::UMat uCur, uPrev, uDiff, uThresh;
         grayCur.copyTo(uCur);
@@ -283,8 +283,8 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
     const int W = m_work3.cols;
     const int H = m_work3.rows;
 
-    // ── 2. Grid-cell classification ──────────────────────────────────────────
-    // Cell size ≈ 1/50 of the shorter dimension (min 8 px).
+    // -- 2. Grid-cell classification ------------------------------------------
+    // Cell size ~= 1/50 of the shorter dimension (min 8 px).
     // Using cells ensures the bounding box grid *fully covers* every active pixel.
     const int cellSize = std::max(8, std::min(W, H) / 50);
     const int gridCols = (W + cellSize - 1) / cellSize;
@@ -302,7 +302,7 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
         }
     }
 
-    // ── 3. 8-neighbour BFS connected-component labelling on the cell grid ────
+    // -- 3. 8-neighbour BFS connected-component labelling on the cell grid ----
     std::vector<int> labels(static_cast<size_t>(gridCols * gridRows), -1);
     int numBlobs = 0;
     for (int gr = 0; gr < gridRows; ++gr) {
@@ -334,7 +334,7 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
         }
     }
 
-    // ── 4. Bounding boxes + CoG + magnitude from cell-union ──────────────────
+    // -- 4. Bounding boxes + CoG + magnitude from cell-union ------------------
     struct BlobStats {
         cv::Rect box; // starts empty; first |= sets it
         int cellCount = 0;
@@ -384,7 +384,7 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
         });
     }
 
-    // ── 5. Populate CSV blobs ─────────────────────────────────────────────────
+    // -- 5. Populate CSV blobs -------------------------------------------------
     if (outBlobs) {
         outBlobs->clear();
         for (const auto &fb : finalBoxes)
@@ -394,7 +394,7 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
     if (!drawOverlay)
         return;
 
-    // ── 6. Draw: semi-transparent fill + internal grid lines + border ─────────
+    // -- 6. Draw: semi-transparent fill + internal grid lines + border ---------
     QPainter p(&image);
     for (const auto &fb : finalBoxes) {
         const cv::Rect &r = fb.box;
@@ -450,9 +450,9 @@ void OpenCVProcessor::applyMotionDetectionOverlay(QImage &image,
     p.end();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Motion vectors overlay (optical flow)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image,
                                                 const cv::Mat &grayCur,
                                                 const cv::Mat &grayPrev,
@@ -482,7 +482,7 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image,
     const double scaleX = static_cast<double>(image.width()) / (grayCur.cols * 0.1);
     const double scaleY = static_cast<double>(image.height()) / (grayCur.rows * 0.1);
 
-    // ── Batch vectors by colour bucket for efficient drawing ────────
+    // -- Batch vectors by colour bucket for efficient drawing --------
     static constexpr int kBuckets = 8;
     static const QColor bucketColors[kBuckets] = {
         QColor(0, 0, 255),
@@ -500,7 +500,7 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image,
         for (int x = 0; x < flow.cols; x += 2) {
             const cv::Point2f &fxy = flow.at<cv::Point2f>(y, x);
             double mag = std::sqrt(fxy.x * fxy.x + fxy.y * fxy.y);
-            // Magnitude threshold: sensitivity 1→thresh 2.0, sensitivity 100→thresh 0.2
+            // Magnitude threshold: sensitivity 1->thresh 2.0, sensitivity 100->thresh 0.2
             double magThresh = 2.0 - (sensitivity - 1) * (1.8 / 99.0);
             if (mag < magThresh)
                 continue;
@@ -522,7 +522,7 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image,
         }
     }
 
-    // ── Vector blob extraction (coarse 6×4 grid for CSV + traces) ──
+    // -- Vector blob extraction (coarse 6x4 grid for CSV + traces) --
     static constexpr int kTCols = 6;
     static constexpr int kTRows = 4;
     int cellW = flow.cols / kTCols;
@@ -586,9 +586,9 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image,
             p.drawLines(bucketLines[b].data(), static_cast<int>(bucketLines[b].size()));
         }
 
-        // ── Motion traces (decaying centroid trails) ────────────────────
+        // -- Motion traces (decaying centroid trails) --------------------
         if (showTraces) {
-            // Decay existing traces  (slider 1–100 → factor 0.80–0.99)
+            // Decay existing traces  (slider 1-100 -> factor 0.80-0.99)
             double decayFactor = 0.80 + (traceDecay - 1) * (0.19 / 99.0);
             for (auto &t : m_motionTraces)
                 t.opacity *= decayFactor;
@@ -617,9 +617,9 @@ void OpenCVProcessor::applyMotionVectorsOverlay(QImage &image,
     } // drawOverlay
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Face detection
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OpenCVProcessor::applyFaceDetection(QImage &image, const cv::Mat &bgrClean)
 {
     if (!m_faceCascadeLoaded) {
@@ -644,9 +644,9 @@ void OpenCVProcessor::applyFaceDetection(QImage &image, const cv::Mat &bgrClean)
     p.end();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Motion level (grid-based, EMA smoothed)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 double OpenCVProcessor::computeMotionLevel(const cv::Mat &grayCur, const cv::Mat &grayPrev, int sensitivity)
 {
     if (grayPrev.empty())
@@ -674,7 +674,7 @@ double OpenCVProcessor::computeMotionLevel(const cv::Mat &grayCur, const cv::Mat
             int idx = row * kGridCols + col;
             m_cellLevels[idx] = ema * m_cellLevels[idx] + (1.0 - ema) * raw;
 
-            // Scale by sensitivity: 1 → 0.5×, 50 → 2.0×, 100 → 4.0×
+            // Scale by sensitivity: 1 -> 0.5x, 50 -> 2.0x, 100 -> 4.0x
             double scale = 0.5 + (sensitivity - 1) * (3.5 / 99.0);
             double lv = m_cellLevels[idx] * scale;
             lv = std::sqrt(std::min(lv, 1.0));
@@ -687,9 +687,9 @@ double OpenCVProcessor::computeMotionLevel(const cv::Mat &grayCur, const cv::Mat
     return std::min(aggregate, 1.0);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Grid motion overlay (coloured rectangles per cell)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OpenCVProcessor::applyGridMotionOverlay(QImage &image, int sensitivity)
 {
     QPainter p(&image);
@@ -724,9 +724,9 @@ void OpenCVProcessor::applyGridMotionOverlay(QImage &image, int sensitivity)
     p.end();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Motion graph overlay (stacked bar chart, sliding window)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void OpenCVProcessor::applyMotionGraphOverlay(QImage &image, double motionLevel)
 {
     m_graphHistory.push_back(motionLevel);

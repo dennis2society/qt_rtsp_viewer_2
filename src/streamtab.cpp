@@ -15,7 +15,7 @@
 #include <QStyle>
 #include <QVBoxLayout>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 StreamTab::StreamTab(int streamId, QWidget *parent)
     : QWidget(parent)
     , m_streamId(streamId)
@@ -23,7 +23,7 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     auto *mainLay = new QVBoxLayout(this);
     mainLay->setContentsMargins(4, 4, 4, 0);
 
-    // ── Controls bar ────────────────────────────────────────────────
+    // -- Controls bar ------------------------------------------------
     auto *ctrlLay = new QHBoxLayout;
 
     m_urlCombo = new QComboBox;
@@ -73,14 +73,14 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
 
     mainLay->addLayout(ctrlLay);
 
-    // ── Video player ────────────────────────────────────────────────
+    // -- Video player ------------------------------------------------
     m_player = new VideoPlayer(m_streamId, this);
     mainLay->addWidget(m_player, 1);
 
     setLayout(mainLay);
     updateButtonStates();
 
-    // ── Connections ─────────────────────────────────────────────────
+    // -- Connections -------------------------------------------------
     connect(m_playBtn, &QPushButton::clicked, this, &StreamTab::onPlayClicked);
     connect(m_stopBtn, &QPushButton::clicked, this, &StreamTab::onStopClicked);
     connect(m_recordBtn, &QPushButton::toggled, this, &StreamTab::onRecordToggled);
@@ -150,7 +150,7 @@ StreamTab::~StreamTab()
     shutDown();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void StreamTab::shutDown()
 {
     if (m_isShutDown)
@@ -164,9 +164,9 @@ void StreamTab::shutDown()
     m_player->stop();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // URL combo population
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void StreamTab::populateUrlCombo()
 {
     QString current = m_urlCombo->currentText();
@@ -180,9 +180,9 @@ void StreamTab::populateUrlCombo()
     m_urlCombo->blockSignals(false);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Transport controls
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void StreamTab::onPlayClicked()
 {
     QString url = m_urlCombo->currentText().trimmed();
@@ -300,7 +300,7 @@ void StreamTab::onUrlChanged(const QString &url)
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void StreamTab::updateButtonStates()
 {
     StreamState st = StreamStateManager::instance().stateCopy(m_streamId);

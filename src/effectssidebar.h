@@ -10,7 +10,7 @@ class QLineEdit;
 class QPushButton;
 class QSpinBox;
 
-/// Shared sidebar — always visible, rebinds to the active stream tab.
+/// Shared sidebar - always visible, rebinds to the active stream tab.
 class EffectsSidebar : public QWidget
 {
     Q_OBJECT
@@ -39,7 +39,7 @@ private:
 
     int m_boundStream = -1;
 
-    // ── controls ────────────────────────────────────────────────────
+    // -- controls ----------------------------------------------------
     // Image adjustments
     QSlider *m_blurSlider = nullptr;
     QLabel *m_blurGpuLabel = nullptr;

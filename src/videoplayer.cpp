@@ -12,7 +12,7 @@
 #include <QVideoFrame>
 #include <QVideoSink>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 VideoPlayer::VideoPlayer(int streamId, QWidget *parent)
     : QWidget(parent)
     , m_streamId(streamId)
@@ -46,46 +46,46 @@ VideoPlayer::~VideoPlayer()
     stopWorker();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Worker + recorder thread management
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void VideoPlayer::startWorker()
 {
     if (m_workerThread)
         return;
 
-    // ── Recorder thread (must be created first so connections exist) ──
+    // -- Recorder thread (must be created first so connections exist) --
     m_recorderThread = new QThread(this);
-    m_recorder = new RecordingWorker(); // no parent – moved to thread
+    m_recorder = new RecordingWorker(); // no parent - moved to thread
     m_recorder->moveToThread(m_recorderThread);
     connect(m_recorderThread, &QThread::finished, m_recorder, &QObject::deleteLater);
 
-    // Recording signals → VideoPlayer
+    // Recording signals -> VideoPlayer
     connect(m_recorder, &RecordingWorker::recordingStarted, this, &VideoPlayer::recordingStarted);
     connect(m_recorder, &RecordingWorker::recordingFinished, this, &VideoPlayer::recordingFinished);
     connect(m_recorder, &RecordingWorker::recordingError, this, &VideoPlayer::recordingError);
 
     m_recorderThread->start();
 
-    // ── Video worker thread ──────────────────────────────────────────
+    // -- Video worker thread ------------------------------------------
     m_workerThread = new QThread(this);
-    m_worker = new VideoWorker(m_streamId); // no parent – moved to thread
+    m_worker = new VideoWorker(m_streamId); // no parent - moved to thread
     m_worker->moveToThread(m_workerThread);
     connect(m_workerThread, &QThread::finished, m_worker, &QObject::deleteLater);
 
-    // Frame submission: multimedia thread → worker (DirectConnection stores
-    // latest frame atomically; worker's QTimer picks it up — drops stale frames)
+    // Frame submission: multimedia thread -> worker (DirectConnection stores
+    // latest frame atomically; worker's QTimer picks it up - drops stale frames)
     connect(m_captureSink, &QVideoSink::videoFrameChanged, m_worker, &VideoWorker::submitFrame, Qt::DirectConnection);
     connect(m_worker, &VideoWorker::frameReady, this, &VideoPlayer::displayFrame);
 
-    // Recording frame pipeline: VideoWorker → RecordingWorker (cross-thread)
+    // Recording frame pipeline: VideoWorker -> RecordingWorker (cross-thread)
     connect(m_worker, &VideoWorker::frameForRecording, m_recorder, &RecordingWorker::enqueueFrame);
 
-    // Auto-record signals: VideoWorker → RecordingWorker
+    // Auto-record signals: VideoWorker -> RecordingWorker
     connect(m_worker, &VideoWorker::startRecordingRequested, m_recorder, &RecordingWorker::startRecording);
     connect(m_worker, &VideoWorker::stopRecordingRequested, m_recorder, &RecordingWorker::stopRecording);
 
-    // Auto-record UI signals → VideoPlayer
+    // Auto-record UI signals -> VideoPlayer
     connect(m_worker, &VideoWorker::autoRecordingStarted, this, &VideoPlayer::autoRecordingStarted);
     connect(m_worker, &VideoWorker::autoRecordingStopped, this, &VideoPlayer::autoRecordingStopped);
 
@@ -94,14 +94,14 @@ void VideoPlayer::startWorker()
 
 void VideoPlayer::stopWorker()
 {
-    // ── Disconnect frame delivery first ──────────────────────────────
+    // -- Disconnect frame delivery first ------------------------------
     // The multimedia thread delivers frames via DirectConnection to the
     // worker.  We must sever that link before tearing down threads,
     // otherwise the multimedia thread can call into a dying worker.
     if (m_worker)
         disconnect(m_captureSink, &QVideoSink::videoFrameChanged, m_worker, &VideoWorker::submitFrame);
 
-    // ── Stop recorder thread first (may need to flush) ───────────────
+    // -- Stop recorder thread first (may need to flush) ---------------
     if (m_recorderThread) {
         if (m_recorder) {
             disconnect(m_recorder, nullptr, nullptr, nullptr);
@@ -113,7 +113,7 @@ void VideoPlayer::stopWorker()
         m_recorder = nullptr;
     }
 
-    // ── Then stop the video worker ───────────────────────────────────
+    // -- Then stop the video worker -----------------------------------
     if (m_workerThread) {
         if (m_worker)
             disconnect(m_worker, nullptr, nullptr, nullptr);
@@ -124,9 +124,9 @@ void VideoPlayer::stopWorker()
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Playback control
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void VideoPlayer::play(const QString &url)
 {
     // Ensure worker threads are running (no-op if already alive)
@@ -156,7 +156,7 @@ void VideoPlayer::stop()
     m_player->stop();
     m_player->setSource(QUrl());
 
-    // Don't tear down worker threads — they are reused on the next play().
+    // Don't tear down worker threads - they are reused on the next play().
     // A deactivated worker with a stopped QTimer consumes zero CPU.
 
     StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
@@ -165,9 +165,9 @@ void VideoPlayer::stop()
     emit playbackStopped();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Recording forwarding  (GUI thread → recorder thread)
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Recording forwarding  (GUI thread -> recorder thread)
+// -----------------------------------------------------------------------------
 void VideoPlayer::startRecording(const QString &path, const QString &codec, double fps)
 {
     StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
@@ -199,9 +199,9 @@ void VideoPlayer::stopRecording()
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Display the composited frame on the video widget
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void VideoPlayer::displayFrame(const QImage &image)
 {
     if (image.isNull())

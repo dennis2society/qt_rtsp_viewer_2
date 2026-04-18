@@ -17,7 +17,7 @@
 
 #include <opencv2/core/ocl.hpp>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 EffectsSidebar::EffectsSidebar(QWidget *parent)
     : QWidget(parent)
 {
@@ -25,9 +25,9 @@ EffectsSidebar::EffectsSidebar(QWidget *parent)
     connectSlots();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // UI construction
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 static QSlider *makeSlider(int min, int max, int val)
 {
     auto *s = new QSlider(Qt::Horizontal);
@@ -82,7 +82,7 @@ void EffectsSidebar::setupUI()
         lay->addLayout(row);
     };
 
-    // ── Image adjustments ───────────────────────────────────────────
+    // -- Image adjustments -------------------------------------------
     addLabel(QStringLiteral("Image Adjustments"));
 
     {
@@ -124,7 +124,7 @@ void EffectsSidebar::setupUI()
 
     lay->addWidget(hLine());
 
-    // ── Detection ───────────────────────────────────────────────────
+    // -- Detection ---------------------------------------------------
     {
         auto *detRow = new QHBoxLayout;
         auto *detLabel = new QLabel(QStringLiteral("Detection / Overlays"));
@@ -178,7 +178,7 @@ void EffectsSidebar::setupUI()
 
     lay->addWidget(hLine());
 
-    // ── Recording ───────────────────────────────────────────────────
+    // -- Recording ---------------------------------------------------
     addLabel(QStringLiteral("Recording"));
 
     lay->addWidget(new QLabel(QStringLiteral("Codec")));
@@ -196,7 +196,7 @@ void EffectsSidebar::setupUI()
 
     lay->addWidget(hLine());
 
-    // ── Auto-record ─────────────────────────────────────────────────
+    // -- Auto-record -------------------------------------------------
     addLabel(QStringLiteral("Auto-Record on Motion"));
 
     m_autoRecCheck = new QCheckBox(QStringLiteral("Enable auto-record"));
@@ -227,9 +227,9 @@ void EffectsSidebar::setupUI()
 
     lay->addWidget(hLine());
 
-    // ── Global output folder ────────────────────────────────────────
+    // -- Global output folder ----------------------------------------
     addLabel(QStringLiteral("Output Folder (global)"));
-    m_outputFolderBtn = new QPushButton(QStringLiteral("Select Folder…"));
+    m_outputFolderBtn = new QPushButton(QStringLiteral("Select Folder..."));
     m_outputFolderLabel = new QLabel;
     m_outputFolderLabel->setWordWrap(true);
     m_outputFolderLabel->setStyleSheet(QStringLiteral("color:gray;"));
@@ -242,14 +242,14 @@ void EffectsSidebar::setupUI()
 
     lay->addWidget(hLine());
 
-    // ── Reset ───────────────────────────────────────────────────────
+    // -- Reset -------------------------------------------------------
     m_resetBtn = new QPushButton(QStringLiteral("Reset Effects"));
     lay->addWidget(m_resetBtn);
 
     lay->addWidget(hLine());
 
-    // ── ONVIF ────────────────────────────────────────────────────────
-    m_onvifSettingsBtn = new QPushButton(QStringLiteral("ONVIF Settings…"));
+    // -- ONVIF --------------------------------------------------------
+    m_onvifSettingsBtn = new QPushButton(QStringLiteral("ONVIF Settings..."));
     lay->addWidget(m_onvifSettingsBtn);
 
     lay->addStretch(1);
@@ -259,17 +259,17 @@ void EffectsSidebar::setupUI()
     setMaximumWidth(270);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Size hint
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 QSize EffectsSidebar::sizeHint() const
 {
     return QSize(260, 600);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Slot wiring
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void EffectsSidebar::connectSlots()
 {
     auto changed = [this]() {
@@ -392,7 +392,7 @@ void EffectsSidebar::connectSlots()
         }
     });
 
-    // ── ONVIF Settings ────────────────────────────────────────────
+    // -- ONVIF Settings --------------------------------------------
     connect(m_onvifSettingsBtn, &QPushButton::clicked, this, [this]() {
         if (m_boundStream < 0)
             return;
@@ -402,9 +402,9 @@ void EffectsSidebar::connectSlots()
     });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Rebind to a different stream
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void EffectsSidebar::bindToStream(int streamId)
 {
     m_boundStream = streamId;
@@ -475,9 +475,9 @@ void EffectsSidebar::bindToStream(int streamId)
     blockAllSignals(false);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Push widget values → StreamStateManager
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
+// Push widget values -> StreamStateManager
+// -----------------------------------------------------------------------------
 void EffectsSidebar::pushState()
 {
     if (m_boundStream < 0)
@@ -513,7 +513,7 @@ void EffectsSidebar::pushState()
     emit effectsChanged(streamId);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void EffectsSidebar::blockAllSignals(bool block)
 {
     m_blurSlider->blockSignals(block);

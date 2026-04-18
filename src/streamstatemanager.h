@@ -19,15 +19,15 @@ class StreamStateManager : public QObject
 public:
     static StreamStateManager &instance();
 
-    // ── stream lifecycle ────────────────────────────────────────────
+    // -- stream lifecycle --------------------------------------------
     int createStream(); ///< returns new streamId
     void removeStream(int id);
 
-    // ── thread-safe state access ────────────────────────────────────
-    /// Read-only snapshot – acquires a shared (read) lock.
+    // -- thread-safe state access ------------------------------------
+    /// Read-only snapshot - acquires a shared (read) lock.
     void readState(int id, const std::function<void(const StreamState &)> &fn) const;
 
-    /// Read-write access – acquires an exclusive (write) lock.
+    /// Read-write access - acquires an exclusive (write) lock.
     /// Emits streamStateChanged(id) after the functor returns.
     void modifyState(int id, const std::function<void(StreamState &)> &fn);
 
@@ -38,11 +38,11 @@ public:
     int streamCount() const;
     QList<int> streamIds() const;
 
-    // ── active stream (UI concept) ──────────────────────────────────
+    // -- active stream (UI concept) ----------------------------------
     int activeStreamId() const;
     void setActiveStream(int id);
 
-    // ── global settings ─────────────────────────────────────────────
+    // -- global settings ---------------------------------------------
     QString outputFolder() const;
     void setOutputFolder(const QString &path);
 
@@ -95,7 +95,7 @@ public:
     static constexpr int MaxTabs = 4;
     static constexpr int MaxUrlHistory = 20;
 
-    // ── persistence ─────────────────────────────────────────────────
+    // -- persistence -------------------------------------------------
     void loadSettings();
     void saveSettings();
 

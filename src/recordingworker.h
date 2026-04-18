@@ -59,13 +59,13 @@ private:
     void closeRecorder();
 #endif
 
-    // ── queue ────────────────────────────────────────────────────────
+    // -- queue --------------------------------------------------------
     static constexpr int kMaxQueueSize = 60; // cap memory (~60 frames)
 
     QMutex m_queueMutex;
     QQueue<QImage> m_queue;
 
-    // ── recording state ─────────────────────────────────────────────
+    // -- recording state ---------------------------------------------
     std::atomic<bool> m_interrupt{false};
     bool m_recording = false;
     bool m_recOpen = false;

@@ -16,7 +16,7 @@
 #include <QTimer>
 #include <QVBoxLayout>
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent)
 {
@@ -24,7 +24,7 @@ MainWindow::MainWindow(QWidget *parent)
     setMinimumSize(800, 480);
     resize(1200, 720);
 
-    // ── Central widget ──────────────────────────────────────────────
+    // -- Central widget ----------------------------------------------
     auto *central = new QWidget;
     auto *hlay = new QHBoxLayout(central);
     hlay->setContentsMargins(4, 4, 4, 4);
@@ -58,7 +58,7 @@ MainWindow::MainWindow(QWidget *parent)
     if (!statusBar())
         setStatusBar(new QStatusBar);
 
-    // ── Connections ─────────────────────────────────────────────────
+    // -- Connections -------------------------------------------------
     connect(m_addTabBtn, &QPushButton::clicked, this, &MainWindow::addNewTab);
     connect(m_tabs, &QTabWidget::tabCloseRequested, this, &MainWindow::closeTab);
     connect(m_tabs, &QTabWidget::currentChanged, this, &MainWindow::onCurrentTabChanged);
@@ -68,7 +68,7 @@ MainWindow::MainWindow(QWidget *parent)
         m_sidebar->bindToStream(streamId);
     });
 
-    // ── Restore saved tabs, or create first tab ──────────────────
+    // -- Restore saved tabs, or create first tab ------------------
     auto savedTabs = StreamStateManager::instance().openTabs();
     if (savedTabs.isEmpty()) {
         addNewTab();
@@ -205,9 +205,9 @@ MainWindow::~MainWindow()
     StreamStateManager::instance().saveSettings();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 // Tab management
-// ─────────────────────────────────────────────────────────────────────────────
+// -----------------------------------------------------------------------------
 void MainWindow::addNewTab()
 {
     if (m_tabs->count() >= StreamStateManager::MaxTabs)

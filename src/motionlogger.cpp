@@ -49,6 +49,6 @@ void MotionLogger::logFrame(qint64 frameNumber, double timestampSec, double fps,
                  << QString::number(v.cog.x(), 'f', 1) << ',' << QString::number(v.cog.y(), 'f', 1) << ',' << QString::number(v.magnitude, 'f', 3) << '\n';
     }
 
-    // Flush periodically (every call — recording is not performance-critical for CSV)
+    // Flush periodically (every call - recording is not performance-critical for CSV)
     m_stream.flush();
 }
