@@ -1,5 +1,6 @@
 #include "mainwindow.h"
 #include "effectssidebar.h"
+#include "fileplayertab.h"
 #include "streamstatemanager.h"
 #include "streamtab.h"
 
@@ -34,11 +35,23 @@ MainWindow::MainWindow(QWidget *parent)
     m_tabs->setTabsClosable(true);
     m_tabs->setMovable(true);
 
-    // "+" corner button
+    // "📁" open-file button + "+" add-tab button in a shared corner widget
+    auto *cornerWidget = new QWidget;
+    auto *cornerLay = new QHBoxLayout(cornerWidget);
+    cornerLay->setContentsMargins(0, 0, 2, 0);
+    cornerLay->setSpacing(2);
+
+    m_openFileBtn = new QPushButton(QStringLiteral("📁"));
+    m_openFileBtn->setToolTip(QStringLiteral("Open video file in new tab"));
+    m_openFileBtn->setFixedSize(28, 28);
+    cornerLay->addWidget(m_openFileBtn);
+
     m_addTabBtn = new QPushButton(QStringLiteral("+"));
     m_addTabBtn->setToolTip(QStringLiteral("Add new stream tab"));
     m_addTabBtn->setFixedSize(28, 28);
-    m_tabs->setCornerWidget(m_addTabBtn, Qt::TopRightCorner);
+    cornerLay->addWidget(m_addTabBtn);
+
+    m_tabs->setCornerWidget(cornerWidget, Qt::TopRightCorner);
 
     hlay->addWidget(m_tabs, 1);
 
@@ -60,6 +73,7 @@ MainWindow::MainWindow(QWidget *parent)
 
     // -- Connections -------------------------------------------------
     connect(m_addTabBtn, &QPushButton::clicked, this, &MainWindow::addNewTab);
+    connect(m_openFileBtn, &QPushButton::clicked, this, &MainWindow::openFilePlayerTab);
     connect(m_tabs, &QTabWidget::tabCloseRequested, this, &MainWindow::closeTab);
     connect(m_tabs, &QTabWidget::currentChanged, this, &MainWindow::onCurrentTabChanged);
 
@@ -198,9 +212,10 @@ MainWindow::~MainWindow()
 
     // Shut down all tabs (disconnects signals first, so no callbacks into dead objects)
     for (int i = 0; i < m_tabs->count(); ++i) {
-        auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i));
-        if (tab)
+        if (auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i)))
             tab->shutDown();
+        else if (auto *ftab = qobject_cast<FilePlayerTab *>(m_tabs->widget(i)))
+            ftab->shutDown();
     }
     StreamStateManager::instance().saveSettings();
 }
@@ -244,14 +259,21 @@ void MainWindow::closeTab(int index)
     if (m_tabs->count() <= 1)
         return; // keep at least one
 
-    auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(index));
-    if (tab) {
+    QWidget *w = m_tabs->widget(index);
+    int id = -1;
+
+    if (auto *tab = qobject_cast<StreamTab *>(w)) {
         tab->shutDown();
-        int id = tab->streamId();
-        m_tabs->removeTab(index);
-        StreamStateManager::instance().removeStream(id);
-        tab->deleteLater();
+        id = tab->streamId();
+    } else if (auto *ftab = qobject_cast<FilePlayerTab *>(w)) {
+        ftab->shutDown();
+        id = ftab->streamId();
     }
+
+    m_tabs->removeTab(index);
+    if (id >= 0)
+        StreamStateManager::instance().removeStream(id);
+    w->deleteLater();
 
     m_addTabBtn->setEnabled(m_tabs->count() < StreamStateManager::MaxTabs);
     m_tabs->tabBar()->setTabsClosable(m_tabs->count() > 1);
@@ -277,6 +299,25 @@ void MainWindow::onTabTitleChanged(int streamId, const QString &title)
 
 int MainWindow::streamIdForTab(int index) const
 {
-    auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(index));
-    return tab ? tab->streamId() : -1;
+    QWidget *w = m_tabs->widget(index);
+    if (auto *tab = qobject_cast<StreamTab *>(w))
+        return tab->streamId();
+    if (auto *ftab = qobject_cast<FilePlayerTab *>(w))
+        return ftab->streamId();
+    return -1;
+}
+
+void MainWindow::openFilePlayerTab()
+{
+    int id = StreamStateManager::instance().createStream();
+    auto *ftab = new FilePlayerTab(id, this);
+
+    int idx = m_tabs->addTab(ftab, QStringLiteral("📁 File Player"));
+    m_tabs->setCurrentIndex(idx);
+
+    connect(ftab, &FilePlayerTab::statusMessage, this, [this](const QString &msg) {
+        statusBar()->showMessage(msg, 5000);
+    });
+
+    m_tabs->tabBar()->setTabsClosable(m_tabs->count() > 1);
 }

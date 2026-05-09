@@ -1,12 +1,12 @@
 #pragma once
 
 #include <QImage>
+#include <QMediaPlayer>
 #include <QPointF>
 #include <QSize>
 #include <QWidget>
 
 class QLabel;
-class QMediaPlayer;
 class QVideoSink;
 class QThread;
 class QTimer;
@@ -31,6 +31,11 @@ public:
 
     void play(const QString &url);
     void stop();
+    void pause();
+    void seekTo(qint64 ms);
+    qint64 position() const;
+    qint64 duration() const;
+    QMediaPlayer::PlaybackState playbackState() const;
 
     // recording
     void startRecording(const QString &path, const QString &codec, double fps);
@@ -46,6 +51,12 @@ signals:
     void recordingError(const QString &msg);
     void autoRecordingStarted(const QString &path);
     void autoRecordingStopped(const QString &path);
+
+    // File playback / overlay helpers
+    void positionChanged(qint64 ms);
+    void durationChanged(qint64 ms);
+    void mediaPlaybackStateChanged(QMediaPlayer::PlaybackState state);
+    void mouseMoved();
 
 private slots:
     void displayFrame(const QImage &image);

@@ -67,6 +67,7 @@ set(SOURCES
     src/streamstatemanager.cpp
     src/mainwindow.cpp
     src/streamtab.cpp
+    src/fileplayertab.cpp
     src/videoplayer.cpp
     src/videoworker.cpp
     src/recordingworker.cpp
@@ -85,6 +86,7 @@ set(HEADERS
     src/streamstatemanager.h
     src/mainwindow.h
     src/streamtab.h
+    src/fileplayertab.h
     src/videoplayer.h
     src/videoworker.h
     src/recordingworker.h

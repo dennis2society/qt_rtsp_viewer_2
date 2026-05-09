@@ -64,6 +64,11 @@ VideoPlayer::VideoPlayer(int streamId, QWidget *parent)
     connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error, const QString &msg) {
         emit errorOccurred(msg);
     });
+
+    // Forward position/duration/state for file player use
+    connect(m_player, &QMediaPlayer::positionChanged, this, &VideoPlayer::positionChanged);
+    connect(m_player, &QMediaPlayer::durationChanged, this, &VideoPlayer::durationChanged);
+    connect(m_player, &QMediaPlayer::playbackStateChanged, this, &VideoPlayer::mediaPlaybackStateChanged);
 }
 
 VideoPlayer::~VideoPlayer()
@@ -158,10 +163,14 @@ void VideoPlayer::play(const QString &url)
     // Ensure worker threads are running (no-op if already alive)
     startWorker();
 
-    if (m_worker)
-        QMetaObject::invokeMethod(m_worker, "resetStream", Qt::QueuedConnection);
+    if (!url.isEmpty()) {
+        // New source: reset inter-frame state and set the new URL
+        if (m_worker)
+            QMetaObject::invokeMethod(m_worker, "resetStream", Qt::QueuedConnection);
+        m_player->setSource(QUrl(url));
+    }
+    // Empty url = resume current source (file player pause→play)
 
-    m_player->setSource(QUrl(url));
     m_player->play();
 
     if (m_worker)
@@ -189,6 +198,31 @@ void VideoPlayer::stop()
         s.playbackState = PlaybackState::Stopped;
     });
     emit playbackStopped();
+}
+
+void VideoPlayer::pause()
+{
+    m_player->pause();
+}
+
+void VideoPlayer::seekTo(qint64 ms)
+{
+    m_player->setPosition(ms);
+}
+
+qint64 VideoPlayer::position() const
+{
+    return m_player->position();
+}
+
+qint64 VideoPlayer::duration() const
+{
+    return m_player->duration();
+}
+
+QMediaPlayer::PlaybackState VideoPlayer::playbackState() const
+{
+    return m_player->playbackState();
 }
 
 // -----------------------------------------------------------------------------
@@ -377,6 +411,7 @@ bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
 
     case QEvent::MouseMove: {
         auto *me = static_cast<QMouseEvent *>(event);
+        emit mouseMoved();
         if (m_isDragging && !m_lastImage.isNull()) {
             const QPoint delta = me->pos() - m_lastMousePos;
             m_lastMousePos = me->pos();
