@@ -1,11 +1,16 @@
 #pragma once
 
+#include <QImage>
+#include <QPointF>
+#include <QSize>
 #include <QWidget>
 
 class QLabel;
 class QMediaPlayer;
 class QVideoSink;
 class QThread;
+class QTimer;
+class QResizeEvent;
 class VideoWorker;
 class RecordingWorker;
 
@@ -49,6 +54,15 @@ private:
     void startWorker();
     void stopWorker();
 
+    // Zoom & pan
+    bool eventFilter(QObject *obj, QEvent *event) override;
+    void resizeEvent(QResizeEvent *event) override;
+    void updateDisplay();
+    void clampPanOffset();
+    QPointF labelToImageCoords(const QPointF &labelPos) const;
+    void showZoomOverlay();
+    void repositionZoomOverlay();
+
     int m_streamId;
     QLabel *m_displayLabel = nullptr;
     QMediaPlayer *m_player = nullptr;
@@ -61,4 +75,18 @@ private:
     // Recording thread (separate from video processing)
     QThread *m_recorderThread = nullptr;
     RecordingWorker *m_recorder = nullptr;
+
+    // Zoom & pan state
+    double m_zoomFactor = 1.0;
+    QPointF m_panOffset; // centre of viewed region in image pixels
+    QImage m_lastImage;
+    QSize m_lastImageSize; // detect resolution changes
+
+    // Drag state
+    bool m_isDragging = false;
+    QPoint m_lastMousePos;
+
+    // Zoom overlay
+    QLabel *m_zoomOverlay = nullptr;
+    QTimer *m_zoomOverlayTimer = nullptr;
 };

@@ -3,14 +3,19 @@
 #include "streamstatemanager.h"
 #include "videoworker.h"
 
+#include <QEvent>
 #include <QLabel>
 #include <QMediaPlayer>
+#include <QMouseEvent>
 #include <QPixmap>
+#include <QResizeEvent>
 #include <QThread>
+#include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
 #include <QVideoFrame>
 #include <QVideoSink>
+#include <QWheelEvent>
 
 // -----------------------------------------------------------------------------
 VideoPlayer::VideoPlayer(int streamId, QWidget *parent)
@@ -22,6 +27,8 @@ VideoPlayer::VideoPlayer(int streamId, QWidget *parent)
     m_displayLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     m_displayLabel->setStyleSheet(QStringLiteral("background-color: black;"));
     m_displayLabel->setMinimumSize(1, 1);
+    m_displayLabel->setMouseTracking(true);
+    m_displayLabel->installEventFilter(this);
 
     m_captureSink = new QVideoSink(this);
     m_player = new QMediaPlayer(this);
@@ -33,6 +40,25 @@ VideoPlayer::VideoPlayer(int streamId, QWidget *parent)
     layout->setContentsMargins(0, 0, 0, 0);
     layout->addWidget(m_displayLabel);
     setLayout(layout);
+
+    // Zoom overlay (floats above the layout as a bare child widget)
+    m_zoomOverlay = new QLabel(this);
+    m_zoomOverlay->setStyleSheet(
+        "QLabel {"
+        "  background-color: rgba(0,0,0,160);"
+        "  color: white;"
+        "  font-size: 14px;"
+        "  font-weight: bold;"
+        "  border-radius: 4px;"
+        "  padding: 4px 10px;"
+        "}");
+    m_zoomOverlay->setAlignment(Qt::AlignCenter);
+    m_zoomOverlay->setAttribute(Qt::WA_TransparentForMouseEvents);
+    m_zoomOverlay->hide();
+
+    m_zoomOverlayTimer = new QTimer(this);
+    m_zoomOverlayTimer->setSingleShot(true);
+    connect(m_zoomOverlayTimer, &QTimer::timeout, m_zoomOverlay, &QLabel::hide);
 
     // Error forwarding
     connect(m_player, &QMediaPlayer::errorOccurred, this, [this](QMediaPlayer::Error, const QString &msg) {
@@ -206,5 +232,186 @@ void VideoPlayer::displayFrame(const QImage &image)
 {
     if (image.isNull())
         return;
-    m_displayLabel->setPixmap(QPixmap::fromImage(image).scaled(m_displayLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+
+    // Reset zoom & pan whenever the stream resolution changes
+    if (image.size() != m_lastImageSize) {
+        m_zoomFactor = 1.0;
+        m_lastImageSize = image.size();
+        m_panOffset = QPointF(image.width() / 2.0, image.height() / 2.0);
+        m_isDragging = false;
+        m_displayLabel->setCursor(Qt::ArrowCursor);
+    }
+
+    m_lastImage = image;
+    updateDisplay();
+}
+
+// -----------------------------------------------------------------------------
+// Zoom / pan helpers
+// -----------------------------------------------------------------------------
+void VideoPlayer::updateDisplay()
+{
+    if (m_lastImage.isNull())
+        return;
+
+    QImage imgToShow;
+    if (m_zoomFactor <= 1.0) {
+        imgToShow = m_lastImage;
+    } else {
+        const QSizeF cropSize = QSizeF(m_lastImage.size()) / m_zoomFactor;
+        QPointF cropTL = m_panOffset - QPointF(cropSize.width() / 2.0, cropSize.height() / 2.0);
+        cropTL.setX(qBound(0.0, cropTL.x(), m_lastImage.width() - cropSize.width()));
+        cropTL.setY(qBound(0.0, cropTL.y(), m_lastImage.height() - cropSize.height()));
+        imgToShow = m_lastImage.copy(QRect(qRound(cropTL.x()), qRound(cropTL.y()), qRound(cropSize.width()), qRound(cropSize.height())));
+    }
+
+    m_displayLabel->setPixmap(QPixmap::fromImage(imgToShow).scaled(m_displayLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+}
+
+void VideoPlayer::clampPanOffset()
+{
+    if (m_lastImage.isNull() || m_zoomFactor <= 1.0)
+        return;
+    const QSizeF cropSize = QSizeF(m_lastImage.size()) / m_zoomFactor;
+    m_panOffset.setX(qBound(cropSize.width() / 2.0, m_panOffset.x(), m_lastImage.width() - cropSize.width() / 2.0));
+    m_panOffset.setY(qBound(cropSize.height() / 2.0, m_panOffset.y(), m_lastImage.height() - cropSize.height() / 2.0));
+}
+
+// Map a position in m_displayLabel's coordinate system to image pixel coordinates,
+// accounting for the current zoom crop.
+QPointF VideoPlayer::labelToImageCoords(const QPointF &labelPos) const
+{
+    if (m_lastImage.isNull())
+        return {};
+    const QSize labelSize = m_displayLabel->size();
+    const QSizeF cropSize = QSizeF(m_lastImage.size()) / m_zoomFactor;
+    const QSizeF scaledSize = cropSize.scaled(labelSize, Qt::KeepAspectRatio);
+    const QPointF pixmapTL((labelSize.width() - scaledSize.width()) / 2.0, (labelSize.height() - scaledSize.height()) / 2.0);
+    const QPointF inPixmap = labelPos - pixmapTL;
+    const QPointF cropPos(inPixmap.x() / scaledSize.width() * cropSize.width(), inPixmap.y() / scaledSize.height() * cropSize.height());
+
+    // Crop top-left in image space (mirroring updateDisplay clamping)
+    QPointF cropTL = m_panOffset - QPointF(cropSize.width() / 2.0, cropSize.height() / 2.0);
+    cropTL.setX(qBound(0.0, cropTL.x(), m_lastImage.width() - cropSize.width()));
+    cropTL.setY(qBound(0.0, cropTL.y(), m_lastImage.height() - cropSize.height()));
+    return cropTL + cropPos;
+}
+
+void VideoPlayer::showZoomOverlay()
+{
+    const QString text = (m_zoomFactor < 1.005) ? QStringLiteral("1\u00d7") : QString("%1\u00d7").arg(m_zoomFactor, 0, 'f', 1);
+    m_zoomOverlay->setText(text);
+    repositionZoomOverlay();
+    m_zoomOverlay->show();
+    m_zoomOverlay->raise();
+    m_zoomOverlayTimer->start(1500);
+}
+
+void VideoPlayer::repositionZoomOverlay()
+{
+    if (!m_zoomOverlay)
+        return;
+    m_zoomOverlay->adjustSize();
+    constexpr int margin = 8;
+    m_zoomOverlay->move(width() - m_zoomOverlay->width() - margin, margin);
+}
+
+// -----------------------------------------------------------------------------
+// Event filter — handles wheel zoom and left-button pan on m_displayLabel
+// -----------------------------------------------------------------------------
+bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj != m_displayLabel)
+        return QObject::eventFilter(obj, event);
+
+    switch (event->type()) {
+    case QEvent::Wheel: {
+        auto *we = static_cast<QWheelEvent *>(event);
+        if (m_lastImage.isNull())
+            break;
+
+        // Image coordinates under the cursor before the zoom change
+        const QPointF imagePoint = labelToImageCoords(we->position());
+
+        const double zoomStep = 1.15;
+        if (we->angleDelta().y() > 0)
+            m_zoomFactor *= zoomStep;
+        else
+            m_zoomFactor /= zoomStep;
+        m_zoomFactor = qBound(1.0, m_zoomFactor, 16.0);
+
+        if (m_zoomFactor <= 1.0) {
+            m_zoomFactor = 1.0;
+            m_panOffset = QPointF(m_lastImage.width() / 2.0, m_lastImage.height() / 2.0);
+            m_displayLabel->setCursor(Qt::ArrowCursor);
+        } else {
+            // Recompute pan so the image point under the cursor stays fixed
+            const QSize labelSize = m_displayLabel->size();
+            const QSizeF cropSize = QSizeF(m_lastImage.size()) / m_zoomFactor;
+            const QSizeF scaledSize = cropSize.scaled(labelSize, Qt::KeepAspectRatio);
+            const QPointF pixmapTL((labelSize.width() - scaledSize.width()) / 2.0, (labelSize.height() - scaledSize.height()) / 2.0);
+            const QPointF cursorInPixmap = we->position() - pixmapTL;
+            const QPointF frac(qBound(0.0, cursorInPixmap.x() / scaledSize.width(), 1.0), qBound(0.0, cursorInPixmap.y() / scaledSize.height(), 1.0));
+
+            m_panOffset =
+                imagePoint - QPointF(frac.x() * cropSize.width(), frac.y() * cropSize.height()) + QPointF(cropSize.width() / 2.0, cropSize.height() / 2.0);
+            clampPanOffset();
+            m_displayLabel->setCursor(Qt::OpenHandCursor);
+        }
+
+        updateDisplay();
+        showZoomOverlay();
+        return true;
+    }
+
+    case QEvent::MouseButtonPress: {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton && m_zoomFactor > 1.0) {
+            m_isDragging = true;
+            m_lastMousePos = me->pos();
+            m_displayLabel->setCursor(Qt::ClosedHandCursor);
+            return true;
+        }
+        break;
+    }
+
+    case QEvent::MouseMove: {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (m_isDragging && !m_lastImage.isNull()) {
+            const QPoint delta = me->pos() - m_lastMousePos;
+            m_lastMousePos = me->pos();
+            const QSize labelSize = m_displayLabel->size();
+            const QSizeF cropSize = QSizeF(m_lastImage.size()) / m_zoomFactor;
+            const QSizeF scaledSize = cropSize.scaled(labelSize, Qt::KeepAspectRatio);
+            // Dragging right pulls the view left → pan offset increases
+            m_panOffset += QPointF(-delta.x() / scaledSize.width() * cropSize.width(), -delta.y() / scaledSize.height() * cropSize.height());
+            clampPanOffset();
+            updateDisplay();
+            return true;
+        }
+        break;
+    }
+
+    case QEvent::MouseButtonRelease: {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton && m_isDragging) {
+            m_isDragging = false;
+            m_displayLabel->setCursor(m_zoomFactor > 1.0 ? Qt::OpenHandCursor : Qt::ArrowCursor);
+            return true;
+        }
+        break;
+    }
+
+    default:
+        break;
+    }
+
+    return QObject::eventFilter(obj, event);
+}
+
+void VideoPlayer::resizeEvent(QResizeEvent *event)
+{
+    QWidget::resizeEvent(event);
+    updateDisplay();
+    repositionZoomOverlay();
 }
