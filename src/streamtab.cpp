@@ -253,8 +253,11 @@ void StreamTab::onRecordToggled(bool checked)
         QString ts = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
         QString cam = st.cameraName;
         cam.replace(QRegularExpression(QStringLiteral("[^a-zA-Z0-9_-]")), QStringLiteral("_"));
-        QString ext = st.recordFormat;
-        QString path = QStringLiteral("%1/%2_%3_recording.%4").arg(folder, ts, cam, ext);
+        // Raw-copy always uses MP4 (format combo is disabled in that mode)
+        const bool isRaw = (st.recordCodec == QLatin1String("raw_copy"));
+        QString ext = isRaw ? QStringLiteral("mp4") : st.recordFormat;
+        QString path =
+            isRaw ? QStringLiteral("%1/%2_%3_recording_raw.%4").arg(folder, ts, cam, ext) : QStringLiteral("%1/%2_%3_recording.%4").arg(folder, ts, cam, ext);
         m_player->startRecording(path, st.recordCodec, st.recordFps);
         m_recordBtn->setStyleSheet(QStringLiteral("background-color:#c62828;color:white;"));
         emit statusMessage(QStringLiteral("Recording started: %1").arg(st.cameraName));

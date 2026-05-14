@@ -13,6 +13,7 @@ class QTimer;
 class QResizeEvent;
 class VideoWorker;
 class RecordingWorker;
+class RawStreamWorker;
 
 /// Widget that wraps QMediaPlayer + QLabel display + worker thread.
 /// One instance per stream tab.
@@ -86,6 +87,9 @@ private:
     // Recording thread (separate from video processing)
     QThread *m_recorderThread = nullptr;
     RecordingWorker *m_recorder = nullptr;
+
+    // Raw-stream copy (QProcess-based, lives on UI thread – no extra thread needed)
+    RawStreamWorker *m_rawWorker = nullptr;
 
     // Zoom & pan state
     double m_zoomFactor = 1.0;

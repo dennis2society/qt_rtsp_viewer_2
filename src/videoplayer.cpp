@@ -1,4 +1,5 @@
 #include "videoplayer.h"
+#include "rawstreamworker.h"
 #include "recordingworker.h"
 #include "streamstatemanager.h"
 #include "videoworker.h"
@@ -69,6 +70,23 @@ VideoPlayer::VideoPlayer(int streamId, QWidget *parent)
     connect(m_player, &QMediaPlayer::positionChanged, this, &VideoPlayer::positionChanged);
     connect(m_player, &QMediaPlayer::durationChanged, this, &VideoPlayer::durationChanged);
     connect(m_player, &QMediaPlayer::playbackStateChanged, this, &VideoPlayer::mediaPlaybackStateChanged);
+
+    // Raw stream copy worker – lives on the UI thread (QProcess is event-loop driven).
+    // Signals connected once here to avoid the duplicate-lambda accumulation problem.
+    m_rawWorker = new RawStreamWorker(this);
+    connect(m_rawWorker, &RawStreamWorker::copyStarted, this, &VideoPlayer::recordingStarted);
+    connect(m_rawWorker, &RawStreamWorker::copyFinished, this, [this](const QString &p) {
+        StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
+            s.isRecording = false;
+        });
+        emit recordingFinished(p);
+    });
+    connect(m_rawWorker, &RawStreamWorker::copyError, this, [this](const QString &msg) {
+        StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
+            s.isRecording = false;
+        });
+        emit recordingError(msg);
+    });
 }
 
 VideoPlayer::~VideoPlayer()
@@ -125,6 +143,10 @@ void VideoPlayer::startWorker()
 
 void VideoPlayer::stopWorker()
 {
+    // -- Stop raw copy process immediately (destructor also handles it) ---
+    if (m_rawWorker && m_rawWorker->isRunning())
+        m_rawWorker->requestStop();
+
     // -- Disconnect frame delivery first ------------------------------
     // The multimedia thread delivers frames via DirectConnection to the
     // worker.  We must sever that link before tearing down threads,
@@ -230,6 +252,25 @@ QMediaPlayer::PlaybackState VideoPlayer::playbackState() const
 // -----------------------------------------------------------------------------
 void VideoPlayer::startRecording(const QString &path, const QString &codec, double fps)
 {
+    // ── Raw stream copy (ffmpeg binary, no re-encode) ─────────────────────────
+    if (codec == QLatin1String("raw_copy")) {
+        QString url;
+        StreamStateManager::instance().readState(m_streamId, [&](const StreamState &s) {
+            url = s.rtspUrl;
+        });
+        if (url.isEmpty()) {
+            emit recordingError(QStringLiteral("No stream URL set – start playback first"));
+            return;
+        }
+
+        StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
+            s.isRecording = true;
+        });
+        m_rawWorker->startCopy(url, path);
+        return;
+    }
+
+    // ── Encoded recording (FFmpeg libraries via RecordingWorker) ──────────────
     StreamStateManager::instance().modifyState(m_streamId, [](StreamState &s) {
         s.isRecording = true;
     });
@@ -245,6 +286,14 @@ void VideoPlayer::startRecording(const QString &path, const QString &codec, doub
 
 void VideoPlayer::stopRecording()
 {
+    // ── Raw copy active? ──────────────────────────────────────────────────────
+    if (m_rawWorker && m_rawWorker->isRunning()) {
+        m_rawWorker->requestStop();
+        // State + signals are handled by copyFinished / copyError slots above.
+        return;
+    }
+
+    // ── Encoded recording ─────────────────────────────────────────────────────
     // Tell the video worker to stop sending frames
     if (m_worker)
         QMetaObject::invokeMethod(m_worker, "setRecording", Qt::QueuedConnection, Q_ARG(bool, false));

@@ -178,6 +178,13 @@ void EffectsSidebar::setupUI()
     m_codecCombo = new QComboBox;
     m_codecCombo->addItem(QStringLiteral("H.264 (libx264)"), QStringLiteral("libx264"));
     m_codecCombo->addItem(QStringLiteral("H.265 (libx265)"), QStringLiteral("libx265"));
+    m_codecCombo->addItem(QStringLiteral("Raw Stream (copy, no re-encode)"), QStringLiteral("raw_copy"));
+    m_codecCombo->setItemData(m_codecCombo->count() - 1,
+                              QStringLiteral("Saves the camera's own H.264/H.265 stream directly.\n"
+                                             "No quality loss, no GPU needed.\n"
+                                             "Requires ffmpeg in PATH or next to the executable.\n"
+                                             "Output is always MP4."),
+                              Qt::ToolTipRole);
     lay->addWidget(m_codecCombo);
 
     lay->addWidget(new QLabel(QStringLiteral("Container")));
@@ -304,7 +311,12 @@ void EffectsSidebar::connectSlots()
         changed();
     });
     connect(m_recordCleanVideoCheck, &QCheckBox::toggled, this, changed);
-    connect(m_codecCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
+    connect(m_codecCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, changed]() {
+        const bool isRaw = (m_codecCombo->currentData().toString() == QLatin1String("raw_copy"));
+        m_formatCombo->setEnabled(!isRaw);
+        m_formatCombo->setToolTip(isRaw ? QStringLiteral("Container is fixed to MP4 for raw stream copy") : QString());
+        changed();
+    });
     connect(m_formatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
 
     connect(m_autoRecCheck, &QCheckBox::toggled, this, [this](bool on) {
@@ -448,6 +460,13 @@ void EffectsSidebar::bindToStream(int streamId)
     int fi = m_formatCombo->findData(st.recordFormat);
     if (fi >= 0)
         m_formatCombo->setCurrentIndex(fi);
+
+    // Disable container combo when raw copy is selected (extension is fixed to MP4)
+    {
+        const bool isRaw = (st.recordCodec == QLatin1String("raw_copy"));
+        m_formatCombo->setEnabled(!isRaw);
+        m_formatCombo->setToolTip(isRaw ? QStringLiteral("Container is fixed to MP4 for raw stream copy") : QString());
+    }
 
     // Auto-record
     m_autoRecCheck->setChecked(st.autoRecordEnabled);

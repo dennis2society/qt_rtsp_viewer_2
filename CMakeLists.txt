@@ -71,6 +71,7 @@ set(SOURCES
     src/videoplayer.cpp
     src/videoworker.cpp
     src/recordingworker.cpp
+    src/rawstreamworker.cpp
     src/effectssidebar.cpp
     src/opencvprocessor.cpp
     src/motionlogger.cpp
@@ -90,6 +91,7 @@ set(HEADERS
     src/videoplayer.h
     src/videoworker.h
     src/recordingworker.h
+    src/rawstreamworker.h
     src/effectssidebar.h
     src/opencvprocessor.h
     src/motionlogger.h
