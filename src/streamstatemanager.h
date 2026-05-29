@@ -85,6 +85,7 @@ public:
         bool autoRecordEnabled = false;
         double autoRecordThreshold = 0.50;
         int autoRecordTimeout = 5;
+        QString outputFolder;
     };
     QList<TabEntry> openTabs() const;
     void setOpenTabs(const QList<TabEntry> &tabs);

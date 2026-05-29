@@ -1,6 +1,9 @@
 #pragma once
 
+#include "streamstate.h"
+
 #include <QDateTime>
+#include <QElapsedTimer>
 #include <QImage>
 #include <QMutex>
 #include <QObject>
@@ -55,6 +58,9 @@ signals:
     void autoRecordingStarted(const QString &path);
     void autoRecordingStopped(const QString &path);
 
+    /// Emitted once when face detection is requested but cascade file is missing.
+    void faceDetectionUnavailable();
+
 private slots:
     /// Driven by QTimer(0) on the worker thread.  Grabs the latest
     /// submitted frame and runs the full effects pipeline.
@@ -63,7 +69,7 @@ private slots:
 private:
     void processFrame(const QVideoFrame &frame);
     void paintFpsOverlay(QImage &img);
-    void handleAutoRecord(double motionLevel);
+    void handleAutoRecord(double motionLevel, const StreamState &st);
 
     int m_streamId;
     OpenCVProcessor *m_processor = nullptr;
@@ -73,7 +79,7 @@ private:
     // FPS counter
     int m_frameCount = 0;
     double m_fps = 0.0;
-    QDateTime m_fpsTimer;
+    QElapsedTimer m_fpsTimer;
 
     // Clean-frame bookkeeping is now managed by OpenCVProcessor
 
@@ -104,4 +110,7 @@ private:
     bool m_autoRecording = false;
     QDateTime m_autoRecStartTime;
     qint64 m_lastMotionAboveMs = 0;
+
+    // -- Face detection availability ---------------------------------
+    bool m_faceDetWarningEmitted = false;
 };

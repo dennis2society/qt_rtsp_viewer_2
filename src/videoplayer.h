@@ -11,6 +11,7 @@ class QVideoSink;
 class QThread;
 class QTimer;
 class QResizeEvent;
+class QAudioOutput;
 class VideoWorker;
 class RecordingWorker;
 class RawStreamWorker;
@@ -42,6 +43,19 @@ public:
     void startRecording(const QString &path, const QString &codec, double fps);
     void stopRecording();
 
+    // audio
+    void setMuted(bool muted);
+    bool isMuted() const;
+    void setVolume(float v); ///< 0.0 – 1.0
+    float volume() const;
+    void setAutoMuted(bool muted); ///< transient mute, does not affect isMuted()
+
+    // snapshot
+    void saveSnapshot();
+
+    // full-screen overlay
+    void toggleFullScreen();
+
 signals:
     void errorOccurred(const QString &msg);
     void playbackStarted();
@@ -52,6 +66,9 @@ signals:
     void recordingError(const QString &msg);
     void autoRecordingStarted(const QString &path);
     void autoRecordingStopped(const QString &path);
+
+    void snapshotSaved(const QString &path);
+    void faceDetectionUnavailable();
 
     // File playback / overlay helpers
     void positionChanged(qint64 ms);
@@ -74,11 +91,15 @@ private:
     QPointF labelToImageCoords(const QPointF &labelPos) const;
     void showZoomOverlay();
     void repositionZoomOverlay();
+    void updateFullScreenLabel();
 
     int m_streamId;
     QLabel *m_displayLabel = nullptr;
     QMediaPlayer *m_player = nullptr;
     QVideoSink *m_captureSink = nullptr;
+    QAudioOutput *m_audioOutput = nullptr;
+    bool m_userMuted = false; ///< set by user (persisted in StreamState)
+    bool m_autoMuted = false; ///< set by auto-mute logic (transient)
 
     // Video processing thread
     QThread *m_workerThread = nullptr;
@@ -101,7 +122,14 @@ private:
     bool m_isDragging = false;
     QPoint m_lastMousePos;
 
+    // Whether the stream is currently playing (fast vs smooth scaling)
+    bool m_streamPlaying = false;
+
     // Zoom overlay
     QLabel *m_zoomOverlay = nullptr;
     QTimer *m_zoomOverlayTimer = nullptr;
+
+    // Full-screen overlay
+    QWidget *m_fullScreenWindow = nullptr;
+    QLabel *m_fullScreenLabel = nullptr;
 };

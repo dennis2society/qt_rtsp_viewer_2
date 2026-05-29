@@ -72,6 +72,10 @@ public:
                                    bool drawOverlay = true,
                                    QVector<MotionLogger::VectorBlob> *outBlobs = nullptr);
     void applyFaceDetection(QImage &image, const cv::Mat &bgrClean);
+    bool isFaceCascadeLoaded() const
+    {
+        return m_faceCascadeLoaded;
+    }
 
     // -- motion analysis ---------------------------------------------
     double computeMotionLevel(const cv::Mat &grayCur, const cv::Mat &grayPrev, int sensitivity);

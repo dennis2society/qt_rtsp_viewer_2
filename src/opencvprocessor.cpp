@@ -98,18 +98,10 @@ void OpenCVProcessor::applyBrightnessContrast(cv::Mat &bgr, int brightness, int 
         return;
 
     double alpha = 1.0 + contrast / 100.0;
-    double beta = brightness;
-
-    cv::Mat lut(1, 256, CV_8U);
-    uchar *p = lut.ptr();
-    for (int i = 0; i < 256; ++i)
-        p[i] = cv::saturate_cast<uchar>(alpha * i + beta);
-
-    std::vector<cv::Mat> chs;
-    cv::split(bgr, chs);
-    for (auto &ch : chs)
-        cv::LUT(ch, lut, ch);
-    cv::merge(chs, m_work1);
+    double beta = static_cast<double>(brightness);
+    // convertTo applies alpha*pixel+beta with saturation in a single pass —
+    // faster than the split→LUT→merge approach.
+    bgr.convertTo(m_work1, -1, alpha, beta);
     cv::swap(bgr, m_work1);
 }
 
@@ -205,8 +197,9 @@ bool OpenCVProcessor::pushGrayFrame(const cv::Mat &grayCur)
                 if (!fr.spike)
                     recentDiffs.push_back(fr.diff);
             if (recentDiffs.size() >= 2) {
-                std::sort(recentDiffs.begin(), recentDiffs.end());
-                double median = recentDiffs[recentDiffs.size() / 2];
+                auto mid = recentDiffs.begin() + static_cast<ptrdiff_t>(recentDiffs.size() / 2);
+                std::nth_element(recentDiffs.begin(), mid, recentDiffs.end());
+                double median = *mid;
                 if (median > 0.001 && globalDiff > kSpikeMultiplier * median)
                     rec.spike = true;
             }
@@ -660,12 +653,13 @@ double OpenCVProcessor::computeMotionLevel(const cv::Mat &grayCur, const cv::Mat
     double maxCell = 0.0, sumCell = 0.0;
     constexpr double ema = 0.55;
 
+    // Single full-frame absdiff — much cheaper than 24 individual roi diffs
+    cv::absdiff(grayCur, grayPrev, m_work2);
+
     for (int row = 0; row < kGridRows; ++row) {
         for (int col = 0; col < kGridCols; ++col) {
             cv::Rect roi(col * cellW, row * cellH, cellW, cellH);
-            cv::Mat diff;
-            cv::absdiff(grayCur(roi), grayPrev(roi), diff);
-            double raw = cv::mean(diff)[0] / 255.0;
+            double raw = cv::mean(m_work2(roi))[0] / 255.0;
 
             // Noise floor: ignore small diffs (compression artifacts)
             if (raw < 0.008)
@@ -744,7 +738,9 @@ void OpenCVProcessor::applyMotionGraphOverlay(QImage &image, double motionLevel)
 
     QPainter p(&image);
 
-    const int gW = 320, gH = 120, margin = 10;
+    const int gW = std::max(200, image.width() / 5);
+    const int gH = std::max(80, image.height() / 8);
+    const int margin = 10;
     int gX = margin;
     int gY = image.height() - gH - margin;
     if (gY < 0)

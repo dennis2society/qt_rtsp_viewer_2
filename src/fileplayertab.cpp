@@ -57,6 +57,9 @@ FilePlayerTab::FilePlayerTab(int streamId, QWidget *parent)
         "  margin: -4px 0;"
         "  background: white;"
         "  border-radius: 6px;"
+        "}"
+        "QSlider#volSlider::sub-page:horizontal {"
+        "  background: rgba(255,255,255,180);"
         "}");
     m_overlay->setAttribute(Qt::WA_TranslucentBackground);
 
@@ -104,6 +107,23 @@ FilePlayerTab::FilePlayerTab(int streamId, QWidget *parent)
     overlayLay->addWidget(m_seekSlider, 1);
     overlayLay->addWidget(m_timeLbl);
 
+    // Mute button
+    m_muteBtn = new QPushButton(QStringLiteral("🔊"), m_overlay);
+    m_muteBtn->setCheckable(true);
+    m_muteBtn->setToolTip(QStringLiteral("Mute / Unmute audio"));
+    m_muteBtn->setFixedWidth(36);
+
+    // Volume slider
+    m_volumeSlider = new QSlider(Qt::Horizontal, m_overlay);
+    m_volumeSlider->setObjectName(QStringLiteral("volSlider"));
+    m_volumeSlider->setRange(0, 100);
+    m_volumeSlider->setValue(80);
+    m_volumeSlider->setFixedWidth(80);
+    m_volumeSlider->setToolTip(QStringLiteral("Volume"));
+
+    overlayLay->addWidget(m_muteBtn);
+    overlayLay->addWidget(m_volumeSlider);
+
     // Auto-hide timer
     m_hideTimer = new QTimer(this);
     m_hideTimer->setSingleShot(true);
@@ -130,6 +150,17 @@ FilePlayerTab::FilePlayerTab(int streamId, QWidget *parent)
 
     // Show overlay whenever the mouse moves over the video
     connect(m_player, &VideoPlayer::mouseMoved, this, &FilePlayerTab::showOverlay);
+
+    // Volume / mute
+    m_player->setVolume(m_volumeSlider->value() / 100.0f);
+    connect(m_muteBtn, &QPushButton::toggled, this, [this](bool muted) {
+        m_player->setMuted(muted);
+        m_muteBtn->setText(muted ? QStringLiteral("🔇") : QStringLiteral("🔊"));
+        m_volumeSlider->setEnabled(!muted);
+    });
+    connect(m_volumeSlider, &QSlider::valueChanged, this, [this](int v) {
+        m_player->setVolume(v / 100.0f);
+    });
 }
 
 FilePlayerTab::~FilePlayerTab()
