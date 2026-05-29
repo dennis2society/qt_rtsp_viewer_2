@@ -11,11 +11,12 @@ This is a Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, *
 ## Features
 
 ### Playback & Multi-Stream
-- **Tabbed stream interface** — display up to 4 RTSP streams simultaneously
-- **Per-stream URL history** — persistent, searchable RTSP URL list
-- **Per-camera naming** — customize display names for each stream
-- **Independent playback control** — play/pause/stop each stream independently
-- **Stream-specific state** — each tab maintains its own effect and recording settings
+- **Tabbed stream interface** - display up to 4 RTSP streams simultaneously
+- **Per-stream URL history** - persistent, searchable RTSP URL list
+- **Per-camera naming** - customize display names for each stream
+- **Independent playback control** - play/pause/stop each stream independently
+- **Stream-specific state** - each tab maintains its own effect and recording settings
+- **Interactive mousewheel zoom** - each stream can be zoomed in on a region using your mousewheel!
 
 ### Image Processing (Real-time, GPU-accelerated where available)
 - **Blur** (Gaussian, configurable kernel size)
@@ -28,21 +29,19 @@ This is a Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, *
 - **Motion Graph** (sliding grid-based activity level, per-row stacked bars with colour coding)
 
 ### Recording
-- **Manual recording** — record any stream on demand
-- **Auto-record on motion** — start/stop recording automatically when motion exceeds threshold
+- **Manual recording** - record any stream on demand
+- **Auto-record on motion** - start/stop recording automatically when motion exceeds threshold
   - Configurable motion threshold (0–100 %)
   - Configurable stop timeout (1–120 seconds)
   - Automatic filename with timestamp + camera name prefix
-- **Codec selection** — per-stream choice of H.264 (libx264) or H.265/HEVC (libx265)
-- **Container format** — per-stream choice of MP4, MKV, or AVI
-- **Persistent output folder** — global recording directory, shared across all streams
-- **Frame rate control** — configurable FPS per recording session
+- **Codec selection** - per-stream choice of H.264 (libx264) or H.265/HEVC (libx265)
+- **Raw stream recording** - record a stream without re-encoding(and without overlays, requires ffmpeg binary in $PATH)
+- **Container format** - per-stream choice of MP4, MKV, or AVI
+- **Persistent output folder** - global recording directory, shared across all streams
+- **Optional per-tab output folder**
 
 ### Overlays & Monitoring
-- **FPS counter** — real-time frames-per-second and resolution display
-- **Datetime overlay** — current date/time stamp (HH:mm:ss)
-- **Grid motion analysis** — 6×4 cell grid with per-cell motion level (colour-coded)
-- **Motion history graph** — 120-frame sliding bar chart with stacked rows
+- Stream FPS counter, Datetime overlay, Grid motion analysis, Motion history graph
 
 ## Dependencies
 - **Qt6** (Core, Gui, Widgets, Multimedia, MultimediaWidgets)
@@ -136,8 +135,8 @@ Settings are stored in `~/.config/QtRtspViewer/QtRtspViewer.conf` (Linux) or the
 
 ## Known Limitations
 
-- **Maximum 4 tabs** — resource constraint for multi-stream processing
-- **No snapshot/export** — current frame cannot be saved as image (can be added)
+- **Maximum 4 tabs** - resource constraint for multi-stream processing
+- **No snapshot/export** - current frame cannot be saved as image (can be added)
 
 ## Troubleshooting
 
