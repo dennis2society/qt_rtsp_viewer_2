@@ -13,6 +13,7 @@
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
+#include <QToolButton>
 #include <QVBoxLayout>
 
 #include <opencv2/core/ocl.hpp>
@@ -46,15 +47,9 @@ static QFrame *hLine()
 
 void EffectsSidebar::setupUI()
 {
-    auto *lay = new QVBoxLayout(this);
-    lay->setContentsMargins(6, 6, 6, 6);
-    lay->setSpacing(6);
-
-    auto addLabel = [&](const QString &text) {
-        auto *l = new QLabel(text);
-        l->setStyleSheet(QStringLiteral("font-weight:bold;"));
-        lay->addWidget(l);
-    };
+    auto *mainLay = new QVBoxLayout(this);
+    mainLay->setContentsMargins(6, 6, 6, 6);
+    mainLay->setSpacing(4);
 
     bool gpuAvailable = cv::ocl::haveOpenCL();
 
@@ -74,21 +69,55 @@ void EffectsSidebar::setupUI()
         return badge;
     };
 
-    auto addLabelWithBadge = [&](const QString &text) {
+    // Helper: create a collapsible section, returns the content QVBoxLayout
+    auto makeSection = [&](const QString &title) -> QVBoxLayout * {
+        auto *btn = new QToolButton;
+        btn->setCheckable(true);
+        btn->setChecked(true);
+        btn->setArrowType(Qt::DownArrow);
+        btn->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
+        btn->setText(title);
+        btn->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        btn->setStyleSheet(QStringLiteral("font-weight:bold; border:none; background:transparent; text-align:left;"));
+        mainLay->addWidget(btn);
+
+        auto *content = new QWidget;
+        auto *cLay = new QVBoxLayout(content);
+        cLay->setContentsMargins(4, 0, 0, 4);
+        cLay->setSpacing(4);
+        mainLay->addWidget(content);
+
+        QObject::connect(btn, &QToolButton::toggled, content, [btn, content](bool on) {
+            btn->setArrowType(on ? Qt::DownArrow : Qt::RightArrow);
+            content->setVisible(on);
+        });
+
+        return cLay;
+    };
+
+    // Helper: add a slider row with a value label
+    auto addSliderRow = [](QVBoxLayout *lay, const QString &labelText, QLabel *&valueLabelOut) {
         auto *row = new QHBoxLayout;
-        row->addWidget(new QLabel(text));
+        row->addWidget(new QLabel(labelText));
         row->addStretch();
-        row->addWidget(makeGpuBadge());
+        valueLabelOut = new QLabel(QStringLiteral("0"));
+        valueLabelOut->setStyleSheet(QStringLiteral("color:gray;font-size:10px;"));
+        row->addWidget(valueLabelOut);
         lay->addLayout(row);
     };
 
-    // -- Image adjustments -------------------------------------------
-    addLabel(QStringLiteral("Image Adjustments"));
+    // ----------------------------------------------------------------
+    // Section: Image Adjustments
+    // ----------------------------------------------------------------
+    QVBoxLayout *imageLay = makeSection(QStringLiteral("Image Adjustments"));
 
     {
         auto *blurRow = new QHBoxLayout;
         blurRow->addWidget(new QLabel(QStringLiteral("Blur")));
         blurRow->addStretch();
+        m_blurValueLabel = new QLabel(QStringLiteral("0"));
+        m_blurValueLabel->setStyleSheet(QStringLiteral("color:gray;font-size:10px;"));
+        blurRow->addWidget(m_blurValueLabel);
         m_blurGpuLabel = new QLabel;
         if (gpuAvailable) {
             m_blurGpuLabel->setText(QStringLiteral("GPU (OpenCL)"));
@@ -102,79 +131,101 @@ void EffectsSidebar::setupUI()
                                "font-size:10px;"));
         }
         blurRow->addWidget(m_blurGpuLabel);
-        lay->addLayout(blurRow);
+        imageLay->addLayout(blurRow);
     }
     m_blurSlider = makeSlider(0, 30, 0);
-    lay->addWidget(m_blurSlider);
+    imageLay->addWidget(m_blurSlider);
 
     m_grayscaleCheck = new QCheckBox(QStringLiteral("Grayscale"));
-    lay->addWidget(m_grayscaleCheck);
+    imageLay->addWidget(m_grayscaleCheck);
 
-    addLabelWithBadge(QStringLiteral("Brightness"));
-    m_brightnessSlider = makeSlider(-100, 100, 0);
-    lay->addWidget(m_brightnessSlider);
-
-    addLabelWithBadge(QStringLiteral("Contrast"));
-    m_contrastSlider = makeSlider(-100, 100, 0);
-    lay->addWidget(m_contrastSlider);
-
-    addLabelWithBadge(QStringLiteral("Colour Temperature"));
-    m_colorTempSlider = makeSlider(-100, 100, 0);
-    lay->addWidget(m_colorTempSlider);
-
-    lay->addWidget(hLine());
-
-    // -- Detection ---------------------------------------------------
     {
-        auto *detRow = new QHBoxLayout;
-        auto *detLabel = new QLabel(QStringLiteral("Detection / Overlays"));
-        detLabel->setStyleSheet(QStringLiteral("font-weight:bold;"));
-        detRow->addWidget(detLabel);
-        detRow->addStretch();
-        detRow->addWidget(makeGpuBadge());
-        lay->addLayout(detRow);
+        auto *row = new QHBoxLayout;
+        row->addWidget(new QLabel(QStringLiteral("Brightness")));
+        row->addStretch();
+        m_brightnessValueLabel = new QLabel(QStringLiteral("0"));
+        m_brightnessValueLabel->setStyleSheet(QStringLiteral("color:gray;font-size:10px;"));
+        row->addWidget(m_brightnessValueLabel);
+        row->addWidget(makeGpuBadge());
+        imageLay->addLayout(row);
     }
+    m_brightnessSlider = makeSlider(-100, 100, 0);
+    imageLay->addWidget(m_brightnessSlider);
+
+    {
+        auto *row = new QHBoxLayout;
+        row->addWidget(new QLabel(QStringLiteral("Contrast")));
+        row->addStretch();
+        m_contrastValueLabel = new QLabel(QStringLiteral("0"));
+        m_contrastValueLabel->setStyleSheet(QStringLiteral("color:gray;font-size:10px;"));
+        row->addWidget(m_contrastValueLabel);
+        row->addWidget(makeGpuBadge());
+        imageLay->addLayout(row);
+    }
+    m_contrastSlider = makeSlider(-100, 100, 0);
+    imageLay->addWidget(m_contrastSlider);
+
+    {
+        auto *row = new QHBoxLayout;
+        row->addWidget(new QLabel(QStringLiteral("Colour Temperature")));
+        row->addStretch();
+        m_colorTempValueLabel = new QLabel(QStringLiteral("0"));
+        m_colorTempValueLabel->setStyleSheet(QStringLiteral("color:gray;font-size:10px;"));
+        row->addWidget(m_colorTempValueLabel);
+        row->addWidget(makeGpuBadge());
+        imageLay->addLayout(row);
+    }
+    m_colorTempSlider = makeSlider(-100, 100, 0);
+    imageLay->addWidget(m_colorTempSlider);
+
+    // ----------------------------------------------------------------
+    // Section: Detection / Overlays
+    // ----------------------------------------------------------------
+    QVBoxLayout *detLay = makeSection(QStringLiteral("Detection / Overlays"));
 
     m_motionDetCheck = new QCheckBox(QStringLiteral("Motion Detection"));
-    lay->addWidget(m_motionDetCheck);
-    lay->addWidget(new QLabel(QStringLiteral("  Sensitivity")));
+    detLay->addWidget(m_motionDetCheck);
+
+    addSliderRow(detLay, QStringLiteral("  Sensitivity"), m_motionSensValueLabel);
     m_motionSensSlider = makeSlider(1, 100, 20);
-    lay->addWidget(m_motionSensSlider);
+    detLay->addWidget(m_motionSensSlider);
 
     m_motionVecCheck = new QCheckBox(QStringLiteral("Motion Vectors"));
-    lay->addWidget(m_motionVecCheck);
-    lay->addWidget(new QLabel(QStringLiteral("  Vectors Sensitivity")));
+    detLay->addWidget(m_motionVecCheck);
+
+    addSliderRow(detLay, QStringLiteral("  Vectors Sensitivity"), m_motionVecSensValueLabel);
     m_motionVecSensSlider = makeSlider(1, 100, 50);
-    lay->addWidget(m_motionVecSensSlider);
+    detLay->addWidget(m_motionVecSensSlider);
 
     m_motionTraceCheck = new QCheckBox(QStringLiteral("  Motion Traces"));
-    lay->addWidget(m_motionTraceCheck);
+    detLay->addWidget(m_motionTraceCheck);
     m_traceDecayLabel = new QLabel(QStringLiteral("  Trace Decay: 50"));
-    lay->addWidget(m_traceDecayLabel);
+    detLay->addWidget(m_traceDecayLabel);
     m_traceDecaySlider = makeSlider(1, 100, 50);
-    lay->addWidget(m_traceDecaySlider);
+    detLay->addWidget(m_traceDecaySlider);
     m_traceDecayLabel->setVisible(false);
     m_traceDecaySlider->setVisible(false);
 
     m_motionGraphCheck = new QCheckBox(QStringLiteral("Motion Graph"));
-    lay->addWidget(m_motionGraphCheck);
-    lay->addWidget(new QLabel(QStringLiteral("  Graph Sensitivity")));
+    detLay->addWidget(m_motionGraphCheck);
+
+    addSliderRow(detLay, QStringLiteral("  Graph Sensitivity"), m_motionGraphSensValueLabel);
     m_motionGraphSensSlider = makeSlider(1, 100, 50);
-    lay->addWidget(m_motionGraphSensSlider);
+    detLay->addWidget(m_motionGraphSensSlider);
 
     m_faceDetCheck = new QCheckBox(QStringLiteral("Face Detection"));
-    lay->addWidget(m_faceDetCheck);
+    detLay->addWidget(m_faceDetCheck);
 
     m_overlayCheck = new QCheckBox(QStringLiteral("FPS / Resolution Overlay"));
     m_overlayCheck->setChecked(true);
-    lay->addWidget(m_overlayCheck);
+    detLay->addWidget(m_overlayCheck);
 
-    lay->addWidget(hLine());
+    // ----------------------------------------------------------------
+    // Section: Recording
+    // ----------------------------------------------------------------
+    QVBoxLayout *recLay = makeSection(QStringLiteral("Recording"));
 
-    // -- Recording ---------------------------------------------------
-    addLabel(QStringLiteral("Recording"));
-
-    lay->addWidget(new QLabel(QStringLiteral("Codec")));
+    recLay->addWidget(new QLabel(QStringLiteral("Codec")));
     m_codecCombo = new QComboBox;
     m_codecCombo->addItem(QStringLiteral("H.264 (libx264)"), QStringLiteral("libx264"));
     m_codecCombo->addItem(QStringLiteral("H.265 (libx265)"), QStringLiteral("libx265"));
@@ -185,42 +236,53 @@ void EffectsSidebar::setupUI()
                                              "Requires ffmpeg in PATH or next to the executable.\n"
                                              "Output is always MP4."),
                               Qt::ToolTipRole);
-    lay->addWidget(m_codecCombo);
+    recLay->addWidget(m_codecCombo);
 
-    lay->addWidget(new QLabel(QStringLiteral("Container")));
+    recLay->addWidget(new QLabel(QStringLiteral("Container")));
     m_formatCombo = new QComboBox;
     m_formatCombo->addItem(QStringLiteral("MP4"), QStringLiteral("mp4"));
     m_formatCombo->addItem(QStringLiteral("MKV"), QStringLiteral("mkv"));
     m_formatCombo->addItem(QStringLiteral("AVI"), QStringLiteral("avi"));
-    lay->addWidget(m_formatCombo);
+    recLay->addWidget(m_formatCombo);
+
+    {
+        auto *fpsRow = new QHBoxLayout;
+        fpsRow->addWidget(new QLabel(QStringLiteral("Record FPS")));
+        m_fpsSpin = new QSpinBox;
+        m_fpsSpin->setRange(1, 60);
+        m_fpsSpin->setValue(25);
+        m_fpsSpin->setToolTip(QStringLiteral("Output framerate for recordings"));
+        fpsRow->addWidget(m_fpsSpin);
+        recLay->addLayout(fpsRow);
+    }
 
     // CSV motion logging
     m_motionCsvCheck = new QCheckBox(QStringLiteral("Log Motion CSV"));
     m_motionCsvCheck->setToolTip(QStringLiteral("Logs motion events to a CSV file in the output folder (only during recording)"));
-    lay->addWidget(m_motionCsvCheck);
+    recLay->addWidget(m_motionCsvCheck);
     m_recordCleanVideoCheck = new QCheckBox(QStringLiteral("  Record Clean Video"));
     m_recordCleanVideoCheck->setVisible(false);
-    lay->addWidget(m_recordCleanVideoCheck);
+    recLay->addWidget(m_recordCleanVideoCheck);
 
-    lay->addWidget(hLine());
-
-    // -- Auto-record -------------------------------------------------
-    addLabel(QStringLiteral("Auto-Record on Motion"));
+    // ----------------------------------------------------------------
+    // Section: Auto-Record
+    // ----------------------------------------------------------------
+    QVBoxLayout *autoLay = makeSection(QStringLiteral("Auto-Record on Motion"));
 
     m_autoRecCheck = new QCheckBox(QStringLiteral("Enable auto-record"));
-    lay->addWidget(m_autoRecCheck);
+    autoLay->addWidget(m_autoRecCheck);
 
     m_thresholdLabel = new QLabel(QStringLiteral("Motion Threshold: 50 %"));
-    lay->addWidget(m_thresholdLabel);
+    autoLay->addWidget(m_thresholdLabel);
     m_thresholdSlider = makeSlider(1, 100, 50);
-    lay->addWidget(m_thresholdSlider);
+    autoLay->addWidget(m_thresholdSlider);
 
     m_timeoutLabel = new QLabel(QStringLiteral("Stop after (s):"));
-    lay->addWidget(m_timeoutLabel);
+    autoLay->addWidget(m_timeoutLabel);
     m_timeoutSpin = new QSpinBox;
     m_timeoutSpin->setRange(1, 120);
     m_timeoutSpin->setValue(5);
-    lay->addWidget(m_timeoutSpin);
+    autoLay->addWidget(m_timeoutSpin);
 
     // Initially hidden
     m_thresholdLabel->setVisible(false);
@@ -231,38 +293,51 @@ void EffectsSidebar::setupUI()
     m_autoRecStatusLabel = new QLabel;
     m_autoRecStatusLabel->setWordWrap(true);
     m_autoRecStatusLabel->setVisible(false);
-    lay->addWidget(m_autoRecStatusLabel);
+    autoLay->addWidget(m_autoRecStatusLabel);
 
-    lay->addWidget(hLine());
+    // ----------------------------------------------------------------
+    // Section: Output Folder
+    // ----------------------------------------------------------------
+    QVBoxLayout *folderLay = makeSection(QStringLiteral("Output Folder"));
 
-    // -- Global output folder ----------------------------------------
-    addLabel(QStringLiteral("Output Folder (global)"));
-    m_outputFolderBtn = new QPushButton(QStringLiteral("Select Folder..."));
+    folderLay->addWidget(new QLabel(QStringLiteral("This tab:")));
+    m_tabFolderBtn = new QPushButton(QStringLiteral("Select Folder..."));
+    m_tabFolderLabel = new QLabel(QStringLiteral("(using global default)"));
+    m_tabFolderLabel->setWordWrap(true);
+    m_tabFolderLabel->setStyleSheet(QStringLiteral("color:gray;"));
+    folderLay->addWidget(m_tabFolderBtn);
+    folderLay->addWidget(m_tabFolderLabel);
+
+    folderLay->addWidget(new QLabel(QStringLiteral("Global default (all tabs):")));
+    m_outputFolderBtn = new QPushButton(QStringLiteral("Select Global Folder..."));
     m_outputFolderLabel = new QLabel;
     m_outputFolderLabel->setWordWrap(true);
     m_outputFolderLabel->setStyleSheet(QStringLiteral("color:gray;"));
-    lay->addWidget(m_outputFolderBtn);
-    lay->addWidget(m_outputFolderLabel);
+    folderLay->addWidget(m_outputFolderBtn);
+    folderLay->addWidget(m_outputFolderLabel);
 
-    // Show current
-    QString cur = StreamStateManager::instance().outputFolder();
-    m_outputFolderLabel->setText(cur.isEmpty() ? QStringLiteral("(not set)") : cur);
+    // Show current global
+    {
+        QString cur = StreamStateManager::instance().outputFolder();
+        m_outputFolderLabel->setText(cur.isEmpty() ? QStringLiteral("(not set)") : cur);
+    }
 
-    lay->addWidget(hLine());
+    // ----------------------------------------------------------------
+    // Bottom bar (always visible)
+    // ----------------------------------------------------------------
+    mainLay->addWidget(hLine());
 
-    // -- Reset -------------------------------------------------------
     m_resetBtn = new QPushButton(QStringLiteral("Reset Effects"));
-    lay->addWidget(m_resetBtn);
+    mainLay->addWidget(m_resetBtn);
 
-    lay->addWidget(hLine());
+    mainLay->addWidget(hLine());
 
-    // -- ONVIF --------------------------------------------------------
     m_onvifSettingsBtn = new QPushButton(QStringLiteral("ONVIF Settings..."));
-    lay->addWidget(m_onvifSettingsBtn);
+    mainLay->addWidget(m_onvifSettingsBtn);
 
-    lay->addStretch(1);
+    mainLay->addStretch(1);
 
-    setLayout(lay);
+    setLayout(mainLay);
     setMinimumWidth(200);
     setMaximumWidth(270);
 }
@@ -284,15 +359,34 @@ void EffectsSidebar::connectSlots()
         pushState();
     };
 
-    connect(m_blurSlider, &QSlider::valueChanged, this, changed);
+    // Value labels + state push
+    connect(m_blurSlider, &QSlider::valueChanged, this, [this, changed](int v) {
+        m_blurValueLabel->setText(QString::number(v));
+        changed();
+    });
     connect(m_grayscaleCheck, &QCheckBox::toggled, this, changed);
-    connect(m_brightnessSlider, &QSlider::valueChanged, this, changed);
-    connect(m_contrastSlider, &QSlider::valueChanged, this, changed);
-    connect(m_colorTempSlider, &QSlider::valueChanged, this, changed);
+    connect(m_brightnessSlider, &QSlider::valueChanged, this, [this, changed](int v) {
+        m_brightnessValueLabel->setText(QString::number(v));
+        changed();
+    });
+    connect(m_contrastSlider, &QSlider::valueChanged, this, [this, changed](int v) {
+        m_contrastValueLabel->setText(QString::number(v));
+        changed();
+    });
+    connect(m_colorTempSlider, &QSlider::valueChanged, this, [this, changed](int v) {
+        m_colorTempValueLabel->setText(QString::number(v));
+        changed();
+    });
     connect(m_motionDetCheck, &QCheckBox::toggled, this, changed);
-    connect(m_motionSensSlider, &QSlider::valueChanged, this, changed);
+    connect(m_motionSensSlider, &QSlider::valueChanged, this, [this, changed](int v) {
+        m_motionSensValueLabel->setText(QString::number(v));
+        changed();
+    });
     connect(m_motionVecCheck, &QCheckBox::toggled, this, changed);
-    connect(m_motionVecSensSlider, &QSlider::valueChanged, this, changed);
+    connect(m_motionVecSensSlider, &QSlider::valueChanged, this, [this, changed](int v) {
+        m_motionVecSensValueLabel->setText(QString::number(v));
+        changed();
+    });
     connect(m_motionTraceCheck, &QCheckBox::toggled, this, [this, changed](bool on) {
         m_traceDecayLabel->setVisible(on);
         m_traceDecaySlider->setVisible(on);
@@ -303,7 +397,10 @@ void EffectsSidebar::connectSlots()
         changed();
     });
     connect(m_motionGraphCheck, &QCheckBox::toggled, this, changed);
-    connect(m_motionGraphSensSlider, &QSlider::valueChanged, this, changed);
+    connect(m_motionGraphSensSlider, &QSlider::valueChanged, this, [this, changed](int v) {
+        m_motionGraphSensValueLabel->setText(QString::number(v));
+        changed();
+    });
     connect(m_faceDetCheck, &QCheckBox::toggled, this, changed);
     connect(m_overlayCheck, &QCheckBox::toggled, this, changed);
     connect(m_motionCsvCheck, &QCheckBox::toggled, this, [this, changed](bool on) {
@@ -318,6 +415,7 @@ void EffectsSidebar::connectSlots()
         changed();
     });
     connect(m_formatCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, changed);
+    connect(m_fpsSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, changed);
 
     connect(m_autoRecCheck, &QCheckBox::toggled, this, [this](bool on) {
         m_thresholdLabel->setVisible(on);
@@ -332,10 +430,26 @@ void EffectsSidebar::connectSlots()
     });
     connect(m_timeoutSpin, QOverload<int>::of(&QSpinBox::valueChanged), this, changed);
 
+    // Per-tab output folder
+    connect(m_tabFolderBtn, &QPushButton::clicked, this, [this]() {
+        if (m_boundStream < 0)
+            return;
+        QString startDir = m_outputFolderPath.isEmpty() ? StreamStateManager::instance().outputFolder() : m_outputFolderPath;
+        QString dir = QFileDialog::getExistingDirectory(window(), QStringLiteral("Select Output Folder for This Tab"), startDir, QFileDialog::ShowDirsOnly);
+        if (dir.isEmpty())
+            return;
+        m_outputFolderPath = dir;
+        m_tabFolderLabel->setText(dir);
+        int sid = m_boundStream;
+        StreamStateManager::instance().modifyState(sid, [dir](StreamState &s) {
+            s.outputFolder = dir;
+        });
+    });
+
     // Global output folder
     connect(m_outputFolderBtn, &QPushButton::clicked, this, [this]() {
         QString dir = QFileDialog::getExistingDirectory(window(),
-                                                        QStringLiteral("Select Output Folder"),
+                                                        QStringLiteral("Select Global Output Folder"),
                                                         StreamStateManager::instance().outputFolder(),
                                                         QFileDialog::ShowDirsOnly);
         if (dir.isEmpty())
@@ -430,14 +544,20 @@ void EffectsSidebar::bindToStream(int streamId)
     blockAllSignals(true);
 
     m_blurSlider->setValue(st.blurAmount);
+    m_blurValueLabel->setText(QString::number(st.blurAmount));
     m_grayscaleCheck->setChecked(st.grayscaleEnabled);
     m_brightnessSlider->setValue(st.brightnessAmount);
+    m_brightnessValueLabel->setText(QString::number(st.brightnessAmount));
     m_contrastSlider->setValue(st.contrastAmount);
+    m_contrastValueLabel->setText(QString::number(st.contrastAmount));
     m_colorTempSlider->setValue(st.colorTemperature);
+    m_colorTempValueLabel->setText(QString::number(st.colorTemperature));
     m_motionDetCheck->setChecked(st.motionDetectionEnabled);
     m_motionSensSlider->setValue(st.motionSensitivity);
+    m_motionSensValueLabel->setText(QString::number(st.motionSensitivity));
     m_motionVecCheck->setChecked(st.motionVectorsEnabled);
     m_motionVecSensSlider->setValue(st.motionVectorsSensitivity);
+    m_motionVecSensValueLabel->setText(QString::number(st.motionVectorsSensitivity));
     m_motionTraceCheck->setChecked(st.motionTracesEnabled);
     m_traceDecaySlider->setValue(st.motionTraceDecay);
     m_traceDecayLabel->setText(QStringLiteral("  Trace Decay: %1").arg(st.motionTraceDecay));
@@ -445,6 +565,7 @@ void EffectsSidebar::bindToStream(int streamId)
     m_traceDecaySlider->setVisible(st.motionTracesEnabled);
     m_motionGraphCheck->setChecked(st.motionGraphEnabled);
     m_motionGraphSensSlider->setValue(st.motionGraphSensitivity);
+    m_motionGraphSensValueLabel->setText(QString::number(st.motionGraphSensitivity));
     m_faceDetCheck->setChecked(st.faceDetectionEnabled);
     m_overlayCheck->setChecked(st.overlayEnabled);
     m_motionCsvCheck->setChecked(st.motionCsvEnabled);
@@ -460,6 +581,9 @@ void EffectsSidebar::bindToStream(int streamId)
     int fi = m_formatCombo->findData(st.recordFormat);
     if (fi >= 0)
         m_formatCombo->setCurrentIndex(fi);
+
+    // Record FPS
+    m_fpsSpin->setValue(st.recordFps > 0 ? static_cast<int>(st.recordFps) : 25);
 
     // Disable container combo when raw copy is selected (extension is fixed to MP4)
     {
@@ -491,6 +615,10 @@ void EffectsSidebar::bindToStream(int streamId)
         m_autoRecStatusLabel->setStyleSheet(QString());
         m_autoRecStatusLabel->setVisible(false);
     }
+
+    // Per-tab output folder
+    m_outputFolderPath = st.outputFolder;
+    m_tabFolderLabel->setText(m_outputFolderPath.isEmpty() ? QStringLiteral("(using global default)") : m_outputFolderPath);
 
     blockAllSignals(false);
 }
@@ -525,6 +653,7 @@ void EffectsSidebar::pushState()
         s.recordCleanVideo = m_recordCleanVideoCheck->isChecked();
         s.recordCodec = m_codecCombo->currentData().toString();
         s.recordFormat = m_formatCombo->currentData().toString();
+        s.recordFps = m_fpsSpin->value();
         s.autoRecordEnabled = m_autoRecCheck->isChecked();
         s.autoRecordThreshold = m_thresholdSlider->value() / 100.0;
         s.autoRecordTimeout = m_timeoutSpin->value();
@@ -536,26 +665,12 @@ void EffectsSidebar::pushState()
 // -----------------------------------------------------------------------------
 void EffectsSidebar::blockAllSignals(bool block)
 {
-    m_blurSlider->blockSignals(block);
-    m_grayscaleCheck->blockSignals(block);
-    m_brightnessSlider->blockSignals(block);
-    m_contrastSlider->blockSignals(block);
-    m_colorTempSlider->blockSignals(block);
-    m_motionDetCheck->blockSignals(block);
-    m_motionSensSlider->blockSignals(block);
-    m_motionVecCheck->blockSignals(block);
-    m_motionVecSensSlider->blockSignals(block);
-    m_motionTraceCheck->blockSignals(block);
-    m_traceDecaySlider->blockSignals(block);
-    m_motionGraphCheck->blockSignals(block);
-    m_motionGraphSensSlider->blockSignals(block);
-    m_faceDetCheck->blockSignals(block);
-    m_overlayCheck->blockSignals(block);
-    m_motionCsvCheck->blockSignals(block);
-    m_recordCleanVideoCheck->blockSignals(block);
-    m_codecCombo->blockSignals(block);
-    m_formatCombo->blockSignals(block);
-    m_autoRecCheck->blockSignals(block);
-    m_thresholdSlider->blockSignals(block);
-    m_timeoutSpin->blockSignals(block);
+    for (auto *w : findChildren<QSlider *>())
+        w->blockSignals(block);
+    for (auto *w : findChildren<QCheckBox *>())
+        w->blockSignals(block);
+    for (auto *w : findChildren<QComboBox *>())
+        w->blockSignals(block);
+    for (auto *w : findChildren<QSpinBox *>())
+        w->blockSignals(block);
 }

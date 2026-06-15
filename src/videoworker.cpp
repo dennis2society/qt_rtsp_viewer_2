@@ -4,11 +4,13 @@
 #include "opencvprocessor.h"
 #include "streamstatemanager.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
 #include <QPainter>
 #include <QRegularExpression>
 #include <QTimer>
+#include <QUrl>
 #include <QVideoFrame>
 
 #include <opencv2/imgproc.hpp>
@@ -22,12 +24,10 @@ VideoWorker::VideoWorker(int streamId, QObject *parent)
     m_motionLogger = new MotionLogger();
     m_detTracker = new MotionTracker();
     m_vecTracker = new MotionTracker();
-    m_fpsTimer = QDateTime::currentDateTime();
+    m_fpsTimer.start();
 
-    // Zero-interval timer drives frame processing on this thread's event loop.
-    // It fires whenever the loop is idle, which naturally rate-limits processing
-    // to the speed the CPU can handle while still servicing other slots.
-    // Started/stopped by setStreamActive() to avoid CPU usage when idle.
+    // 5 ms interval: low CPU overhead when idle, imperceptible latency increase
+    // vs 0 ms which hammers the event loop even when there is nothing to process.
     m_processTimer = new QTimer(this);
     connect(m_processTimer, &QTimer::timeout, this, &VideoWorker::processPendingFrame);
 }
@@ -48,7 +48,7 @@ void VideoWorker::setStreamActive(bool a)
     m_streamActive = a;
     if (a) {
         if (!m_processTimer->isActive())
-            m_processTimer->start(0);
+            m_processTimer->start(5);
     } else {
         m_processTimer->stop();
     }
@@ -106,11 +106,11 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     // FPS bookkeeping
     ++m_frameCount;
-    qint64 elapsed = m_fpsTimer.msecsTo(QDateTime::currentDateTime());
+    qint64 elapsed = m_fpsTimer.elapsed();
     if (elapsed >= 1000) {
         m_fps = m_frameCount * 1000.0 / elapsed;
         m_frameCount = 0;
-        m_fpsTimer = QDateTime::currentDateTime();
+        m_fpsTimer.restart();
     }
 
     // Convert QVideoFrame -> QImage -> BGR cv::Mat (once)
@@ -298,8 +298,13 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
     }
 
     // 11. Face detection (independent of motion spike)
-    if (needsFace)
+    if (needsFace) {
         m_processor->applyFaceDetection(image, cleanBGR);
+        if (!m_faceDetWarningEmitted && !m_processor->isFaceCascadeLoaded()) {
+            m_faceDetWarningEmitted = true;
+            emit faceDetectionUnavailable();
+        }
+    }
 
     // 12. Grid motion overlay
     if (st.motionGraphEnabled)
@@ -325,7 +330,7 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 
     // 17. Auto-record logic
     if (st.autoRecordEnabled)
-        handleAutoRecord(motionLevel);
+        handleAutoRecord(motionLevel, st);
 
     emit frameReady(image);
 }
@@ -336,37 +341,33 @@ void VideoWorker::processFrame(const QVideoFrame &frame)
 void VideoWorker::paintFpsOverlay(QImage &img)
 {
     QPainter p(&img);
-    p.setPen(QPen(QColor(0, 255, 0), 2)); // Bright green with 2px width for better visibility
-    p.setFont(QFont(QStringLiteral("Monospace"), 13, QFont::Bold));
+    const int fontSize = std::max(9, img.width() / 90);
+    p.setFont(QFont(QStringLiteral("Monospace"), fontSize, QFont::Bold));
+    p.setPen(QPen(QColor(0, 255, 0), 1));
 
-    QString fps = QStringLiteral("FPS: %1").arg(m_fps, 0, 'f', 1);
-    QString res = QStringLiteral("Res: %1x%2").arg(img.width()).arg(img.height());
-    QString dt = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
+    const QString fps = QStringLiteral("FPS: %1").arg(m_fps, 0, 'f', 1);
+    const QString res = QStringLiteral("Res: %1x%2").arg(img.width()).arg(img.height());
+    const QString dt = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd hh:mm:ss"));
 
-    int x = img.width() - 240, y = 20;
-    if (x < 10)
-        x = 10;
+    const QFontMetrics fm(p.font());
+    const int lineH = fm.height() + 2;
+    const int boxW = fm.horizontalAdvance(dt) + 10;
+    const int x = std::max(4, img.width() - boxW - 4);
+    const int y = lineH;
 
-    // Background box
-    p.fillRect(x - 4, y - 14, 234, 52, QColor(0, 0, 0, 160));
+    p.fillRect(x - 4, y - lineH + 2, boxW, lineH * 3 + 4, QColor(0, 0, 0, 160));
     p.drawText(x, y, fps);
-    p.drawText(x, y + 16, res);
-    p.drawText(x, y + 32, dt);
+    p.drawText(x, y + lineH, res);
+    p.drawText(x, y + lineH * 2, dt);
     p.end();
 }
 
 // -----------------------------------------------------------------------------
 // Auto-record on motion
 // -----------------------------------------------------------------------------
-void VideoWorker::handleAutoRecord(double motionLevel)
+void VideoWorker::handleAutoRecord(double motionLevel, const StreamState &st)
 {
-    StreamState st;
-    StreamStateManager::instance().readState(m_streamId, [&](const StreamState &s) {
-        st = s;
-    });
-
     qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
-
     if (motionLevel >= st.autoRecordThreshold) {
         // Reset the timeout countdown - keeps recording alive while motion
         // continues to exceed the threshold (ensures continuous recording).

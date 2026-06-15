@@ -104,6 +104,22 @@ set(HEADERS
 
 add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
 
+target_compile_options(${PROJECT_NAME} PRIVATE
+    $<$<CXX_COMPILER_ID:GNU,Clang>:
+        -Wall
+        -Werror
+        -Wunused-variable
+        -Wunused-but-set-variable
+        -Wunused-parameter
+    >
+    $<$<CXX_COMPILER_ID:MSVC>:
+        /W4
+        /WX
+        /we4189   # local variable initialized but not referenced
+        /we4101   # unreferenced local variable
+    >
+)
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Gui

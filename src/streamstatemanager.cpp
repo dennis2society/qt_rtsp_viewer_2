@@ -254,6 +254,7 @@ void StreamStateManager::loadSettings()
         e.autoRecordEnabled = m_settings.value(QStringLiteral("autoRecordEnabled"), false).toBool();
         e.autoRecordThreshold = m_settings.value(QStringLiteral("autoRecordThreshold"), 0.50).toDouble();
         e.autoRecordTimeout = m_settings.value(QStringLiteral("autoRecordTimeout"), 5).toInt();
+        e.outputFolder = m_settings.value(QStringLiteral("outputFolder")).toString();
         m_openTabs.append(e);
     }
     m_settings.endArray();
@@ -306,6 +307,7 @@ void StreamStateManager::saveSettings()
         m_settings.setValue(QStringLiteral("autoRecordEnabled"), m_openTabs[i].autoRecordEnabled);
         m_settings.setValue(QStringLiteral("autoRecordThreshold"), m_openTabs[i].autoRecordThreshold);
         m_settings.setValue(QStringLiteral("autoRecordTimeout"), m_openTabs[i].autoRecordTimeout);
+        m_settings.setValue(QStringLiteral("outputFolder"), m_openTabs[i].outputFolder);
     }
     m_settings.endArray();
     m_settings.endGroup();

@@ -3,14 +3,23 @@
 #include "fileplayertab.h"
 #include "streamstatemanager.h"
 #include "streamtab.h"
+#include "videoplayer.h"
 
 #include <QCloseEvent>
+#include <QColor>
 #include <QComboBox>
 #include <QHBoxLayout>
+#include <QIcon>
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMediaPlayer>
+#include <QPainter>
+#include <QPixmap>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QScrollBar>
+#include <QShortcut>
 #include <QStatusBar>
 #include <QTabBar>
 #include <QTabWidget>
@@ -56,14 +65,14 @@ MainWindow::MainWindow(QWidget *parent)
     hlay->addWidget(m_tabs, 1);
 
     // Sidebar in scroll area
-    auto *scroll = new QScrollArea;
-    scroll->setWidgetResizable(true);
-    scroll->setMinimumWidth(210);
-    scroll->setMaximumWidth(280);
-    scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    m_sidebarScroll = new QScrollArea;
+    m_sidebarScroll->setWidgetResizable(true);
+    m_sidebarScroll->setMinimumWidth(210);
+    m_sidebarScroll->setMaximumWidth(280);
+    m_sidebarScroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     m_sidebar = new EffectsSidebar;
-    scroll->setWidget(m_sidebar);
-    hlay->addWidget(scroll);
+    m_sidebarScroll->setWidget(m_sidebar);
+    hlay->addWidget(m_sidebarScroll);
 
     setCentralWidget(central);
 
@@ -82,7 +91,37 @@ MainWindow::MainWindow(QWidget *parent)
         m_sidebar->bindToStream(streamId);
     });
 
-    // -- Restore saved tabs, or create first tab ------------------
+    // When stream state changes (playing/recording), update the tab icon
+    connect(&StreamStateManager::instance(), &StreamStateManager::streamStateChanged, this, &MainWindow::updateTabIcon);
+
+    // -- Keyboard shortcuts ------------------------------------------
+    // Space = play / stop the current stream tab
+    auto *shortcutPlay = new QShortcut(QKeySequence(Qt::Key_Space), this);
+    connect(shortcutPlay, &QShortcut::activated, this, [this]() {
+        if (auto *tab = qobject_cast<StreamTab *>(m_tabs->currentWidget()))
+            tab->onPlayStopClicked();
+    });
+
+    // Ctrl+S = save snapshot
+    auto *shortcutSnap = new QShortcut(QKeySequence::Save, this);
+    connect(shortcutSnap, &QShortcut::activated, this, [this]() {
+        if (auto *tab = qobject_cast<StreamTab *>(m_tabs->currentWidget()))
+            tab->videoPlayer()->saveSnapshot();
+    });
+
+    // Ctrl+R = toggle record
+    auto *shortcutRec = new QShortcut(QKeySequence(Qt::CTRL | Qt::Key_R), this);
+    connect(shortcutRec, &QShortcut::activated, this, [this]() {
+        if (auto *tab = qobject_cast<StreamTab *>(m_tabs->currentWidget()))
+            tab->toggleRecord();
+    });
+
+    // F11 = toggle full-screen overlay
+    auto *shortcutFs = new QShortcut(QKeySequence(Qt::Key_F11), this);
+    connect(shortcutFs, &QShortcut::activated, this, [this]() {
+        if (auto *tab = qobject_cast<StreamTab *>(m_tabs->currentWidget()))
+            tab->videoPlayer()->toggleFullScreen();
+    });
     auto savedTabs = StreamStateManager::instance().openTabs();
     if (savedTabs.isEmpty()) {
         addNewTab();
@@ -133,6 +172,7 @@ MainWindow::MainWindow(QWidget *parent)
                     s.autoRecordEnabled = entry.autoRecordEnabled;
                     s.autoRecordThreshold = entry.autoRecordThreshold;
                     s.autoRecordTimeout = entry.autoRecordTimeout;
+                    s.outputFolder = entry.outputFolder;
                 });
 
                 // Set camera name in the line edit
@@ -202,6 +242,7 @@ MainWindow::~MainWindow()
             entry.autoRecordEnabled = st.autoRecordEnabled;
             entry.autoRecordThreshold = st.autoRecordThreshold;
             entry.autoRecordTimeout = st.autoRecordTimeout;
+            entry.outputFolder = st.outputFolder;
             tabs.append(entry);
         }
     }
@@ -222,6 +263,22 @@ MainWindow::~MainWindow()
 
 // -----------------------------------------------------------------------------
 // Tab management
+void MainWindow::autoMuteOtherTabs(int playingStreamId)
+{
+    for (int i = 0; i < m_tabs->count(); ++i) {
+        if (auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i)))
+            tab->videoPlayer()->setAutoMuted(tab->streamId() != playingStreamId);
+    }
+}
+
+void MainWindow::clearAllAutoMutes()
+{
+    for (int i = 0; i < m_tabs->count(); ++i) {
+        if (auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i)))
+            tab->videoPlayer()->setAutoMuted(false);
+    }
+}
+
 // -----------------------------------------------------------------------------
 void MainWindow::addNewTab()
 {
@@ -245,6 +302,15 @@ void MainWindow::addNewTab()
         int idx = m_tabs->indexOf(tab);
         if (idx >= 0)
             closeTab(idx);
+    });
+
+    // Auto-mute: when this tab starts playing, mute all others.
+    // When it stops, clear all auto-mutes (let user-mute prefs take over).
+    connect(tab->videoPlayer(), &VideoPlayer::playbackStarted, this, [this, tab]() {
+        autoMuteOtherTabs(tab->streamId());
+    });
+    connect(tab->videoPlayer(), &VideoPlayer::playbackStopped, this, [this]() {
+        clearAllAutoMutes();
     });
 
     // Enable / disable "+"
@@ -281,9 +347,24 @@ void MainWindow::closeTab(int index)
 
 void MainWindow::onCurrentTabChanged(int index)
 {
-    int id = streamIdForTab(index);
-    if (id >= 0)
-        StreamStateManager::instance().setActiveStream(id);
+    const int id = streamIdForTab(index);
+    if (id < 0)
+        return;
+
+    // Save previous stream's scroll position
+    const int prevId = StreamStateManager::instance().activeStreamId();
+    if (prevId >= 0 && m_sidebarScroll)
+        m_sidebarScrollPos[prevId] = m_sidebarScroll->verticalScrollBar()->value();
+
+    StreamStateManager::instance().setActiveStream(id);
+
+    // Restore scroll position for the new stream (deferred so layout settles)
+    if (m_sidebarScroll) {
+        const int savedPos = m_sidebarScrollPos.value(id, 0);
+        QTimer::singleShot(0, this, [this, savedPos]() {
+            m_sidebarScroll->verticalScrollBar()->setValue(savedPos);
+        });
+    }
 }
 
 void MainWindow::onTabTitleChanged(int streamId, const QString &title)
@@ -320,4 +401,38 @@ void MainWindow::openFilePlayerTab()
     });
 
     m_tabs->tabBar()->setTabsClosable(m_tabs->count() > 1);
+}
+
+// -----------------------------------------------------------------------------
+// Tab status icons
+// -----------------------------------------------------------------------------
+QIcon MainWindow::makeStatusIcon(const QColor &color)
+{
+    QPixmap pm(12, 12);
+    pm.fill(Qt::transparent);
+    QPainter p(&pm);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setBrush(color);
+    p.setPen(Qt::NoPen);
+    p.drawEllipse(1, 1, 10, 10);
+    return QIcon(pm);
+}
+
+void MainWindow::updateTabIcon(int streamId)
+{
+    for (int i = 0; i < m_tabs->count(); ++i) {
+        auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i));
+        if (!tab || tab->streamId() != streamId)
+            continue;
+        StreamState st = StreamStateManager::instance().stateCopy(streamId);
+        QIcon icon;
+        if (st.isRecording || st.isAutoRecording)
+            icon = makeStatusIcon(QColor(0xc6, 0x28, 0x28)); // red
+        else if (st.playbackState == PlaybackState::Playing)
+            icon = makeStatusIcon(QColor(0x2e, 0x7d, 0x32)); // green
+        else
+            icon = makeStatusIcon(QColor(0xaa, 0xaa, 0xaa)); // gray
+        m_tabs->setTabIcon(i, icon);
+        break;
+    }
 }

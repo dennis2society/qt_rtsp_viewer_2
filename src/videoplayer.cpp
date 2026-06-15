@@ -4,11 +4,17 @@
 #include "streamstatemanager.h"
 #include "videoworker.h"
 
+#include <QAudioOutput>
+#include <QDateTime>
+#include <QDir>
 #include <QEvent>
+#include <QFileDialog>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMediaPlayer>
 #include <QMouseEvent>
 #include <QPixmap>
+#include <QRegularExpression>
 #include <QResizeEvent>
 #include <QThread>
 #include <QTimer>
@@ -33,6 +39,10 @@ VideoPlayer::VideoPlayer(int streamId, QWidget *parent)
 
     m_captureSink = new QVideoSink(this);
     m_player = new QMediaPlayer(this);
+
+    // Audio output (muted state is loaded from StreamState in StreamTab)
+    m_audioOutput = new QAudioOutput(this);
+    m_player->setAudioOutput(m_audioOutput);
 
     // Player sends frames to our capture sink for processing
     m_player->setVideoOutput(m_captureSink);
@@ -138,6 +148,9 @@ void VideoPlayer::startWorker()
     connect(m_worker, &VideoWorker::autoRecordingStarted, this, &VideoPlayer::autoRecordingStarted);
     connect(m_worker, &VideoWorker::autoRecordingStopped, this, &VideoPlayer::autoRecordingStopped);
 
+    // Face detection cascade warning
+    connect(m_worker, &VideoWorker::faceDetectionUnavailable, this, &VideoPlayer::faceDetectionUnavailable);
+
     m_workerThread->start();
 }
 
@@ -195,6 +208,7 @@ void VideoPlayer::play(const QString &url)
 
     m_player->play();
 
+    m_streamPlaying = true;
     if (m_worker)
         QMetaObject::invokeMethod(m_worker, "setStreamActive", Qt::QueuedConnection, Q_ARG(bool, true));
 
@@ -212,6 +226,8 @@ void VideoPlayer::stop()
 
     m_player->stop();
     m_player->setSource(QUrl());
+
+    m_streamPlaying = false;
 
     // Don't tear down worker threads - they are reused on the next play().
     // A deactivated worker with a stopped QTimer consumes zero CPU.
@@ -248,6 +264,100 @@ QMediaPlayer::PlaybackState VideoPlayer::playbackState() const
 }
 
 // -----------------------------------------------------------------------------
+// Audio
+// -----------------------------------------------------------------------------
+void VideoPlayer::setMuted(bool muted)
+{
+    m_userMuted = muted;
+    if (m_audioOutput)
+        m_audioOutput->setMuted(m_userMuted || m_autoMuted);
+}
+
+bool VideoPlayer::isMuted() const
+{
+    return m_userMuted;
+}
+
+void VideoPlayer::setAutoMuted(bool muted)
+{
+    m_autoMuted = muted;
+    if (m_audioOutput)
+        m_audioOutput->setMuted(m_userMuted || m_autoMuted);
+}
+
+void VideoPlayer::setVolume(float v)
+{
+    if (m_audioOutput)
+        m_audioOutput->setVolume(qBound(0.0f, v, 1.0f));
+}
+
+float VideoPlayer::volume() const
+{
+    return m_audioOutput ? m_audioOutput->volume() : 1.0f;
+}
+
+// Snapshot
+// -----------------------------------------------------------------------------
+void VideoPlayer::saveSnapshot()
+{
+    if (m_lastImage.isNull())
+        return;
+
+    StreamState st = StreamStateManager::instance().stateCopy(m_streamId);
+    QString folder = st.outputFolder.isEmpty() ? StreamStateManager::instance().outputFolder() : st.outputFolder;
+    if (folder.isEmpty()) {
+        folder = QFileDialog::getExistingDirectory(this, QStringLiteral("Select folder for snapshot"), QDir::homePath());
+        if (folder.isEmpty())
+            return;
+    }
+    QString ts = QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd_HH-mm-ss"));
+    QString cam = st.cameraName;
+    cam.replace(QRegularExpression(QStringLiteral("[^a-zA-Z0-9_-]")), QStringLiteral("_"));
+    QString path = QStringLiteral("%1/%2_%3_snapshot.png").arg(folder, ts, cam);
+    if (m_lastImage.save(path))
+        emit snapshotSaved(path);
+}
+
+// Full-screen overlay
+// -----------------------------------------------------------------------------
+void VideoPlayer::toggleFullScreen()
+{
+    if (m_fullScreenWindow) {
+        m_fullScreenWindow->close();
+        return;
+    }
+
+    m_fullScreenWindow = new QWidget(nullptr, Qt::Window | Qt::FramelessWindowHint);
+    m_fullScreenWindow->setStyleSheet(QStringLiteral("background-color: black;"));
+    m_fullScreenWindow->setAttribute(Qt::WA_DeleteOnClose);
+    connect(m_fullScreenWindow, &QWidget::destroyed, this, [this]() {
+        m_fullScreenWindow = nullptr;
+        m_fullScreenLabel = nullptr;
+    });
+
+    auto *lay = new QVBoxLayout(m_fullScreenWindow);
+    lay->setContentsMargins(0, 0, 0, 0);
+    m_fullScreenLabel = new QLabel;
+    m_fullScreenLabel->setAlignment(Qt::AlignCenter);
+    m_fullScreenLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    lay->addWidget(m_fullScreenLabel);
+
+    // Capture key/double-click on both the window and the label
+    m_fullScreenWindow->installEventFilter(this);
+    m_fullScreenLabel->installEventFilter(this);
+
+    m_fullScreenWindow->showFullScreen();
+    updateFullScreenLabel();
+}
+
+void VideoPlayer::updateFullScreenLabel()
+{
+    if (!m_fullScreenLabel || m_lastImage.isNull())
+        return;
+    const QSize sz = m_fullScreenLabel->size().isValid() ? m_fullScreenLabel->size() : m_lastImage.size();
+    m_fullScreenLabel->setPixmap(QPixmap::fromImage(m_lastImage).scaled(sz, Qt::KeepAspectRatio, Qt::FastTransformation));
+}
+
 // Recording forwarding  (GUI thread -> recorder thread)
 // -----------------------------------------------------------------------------
 void VideoPlayer::startRecording(const QString &path, const QString &codec, double fps)
@@ -326,6 +436,8 @@ void VideoPlayer::displayFrame(const QImage &image)
     }
 
     m_lastImage = image;
+    if (m_fullScreenLabel)
+        updateFullScreenLabel();
     updateDisplay();
 }
 
@@ -348,7 +460,10 @@ void VideoPlayer::updateDisplay()
         imgToShow = m_lastImage.copy(QRect(qRound(cropTL.x()), qRound(cropTL.y()), qRound(cropSize.width()), qRound(cropSize.height())));
     }
 
-    m_displayLabel->setPixmap(QPixmap::fromImage(imgToShow).scaled(m_displayLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    // Use fast scaling during live playback to reduce CPU load;
+    // switch to smooth when paused / stopped so static frames look sharp.
+    const Qt::TransformationMode tm = m_streamPlaying ? Qt::FastTransformation : Qt::SmoothTransformation;
+    m_displayLabel->setPixmap(QPixmap::fromImage(imgToShow).scaled(m_displayLabel->size(), Qt::KeepAspectRatio, tm));
 }
 
 void VideoPlayer::clampPanOffset()
@@ -481,6 +596,24 @@ bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
         if (me->button() == Qt::LeftButton && m_isDragging) {
             m_isDragging = false;
             m_displayLabel->setCursor(m_zoomFactor > 1.0 ? Qt::OpenHandCursor : Qt::ArrowCursor);
+            return true;
+        }
+        break;
+    }
+
+    case QEvent::MouseButtonDblClick: {
+        auto *me = static_cast<QMouseEvent *>(event);
+        if (me->button() == Qt::LeftButton) {
+            toggleFullScreen();
+            return true;
+        }
+        break;
+    }
+
+    case QEvent::KeyPress: {
+        auto *ke = static_cast<QKeyEvent *>(event);
+        if (ke->key() == Qt::Key_Escape && m_fullScreenWindow) {
+            m_fullScreenWindow->close();
             return true;
         }
         break;

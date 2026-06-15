@@ -72,5 +72,7 @@ private:
     QPushButton *m_stopBtn = nullptr;
     QSlider *m_seekSlider = nullptr;
     QLabel *m_timeLbl = nullptr;
+    QPushButton *m_muteBtn = nullptr;
+    QSlider *m_volumeSlider = nullptr;
     QTimer *m_hideTimer = nullptr;
 };

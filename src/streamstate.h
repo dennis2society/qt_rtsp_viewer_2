@@ -53,8 +53,14 @@ struct StreamState {
     bool motionCsvEnabled = false; // log motion data to CSV during recording
     bool recordCleanVideo = false; // record pre-overlay frame (overlays still visible on screen)
 
+    // -- audio -----------------------------------------------------
+    bool isMuted = false;
+
     // -- auto-record on motion --------------------------------------
     bool autoRecordEnabled = false;
     double autoRecordThreshold = 0.50; // 0.0 ... 1.0
     int autoRecordTimeout = 5; // seconds  (1 ... 120)
+
+    // -- per-tab output folder (empty = fall back to global) --------
+    QString outputFolder;
 };
