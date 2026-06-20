@@ -89,6 +89,7 @@ private:
     void updateDisplay();
     void clampPanOffset();
     QPointF labelToImageCoords(const QPointF &labelPos) const;
+    QLabel *activeLabel() const;
     void showZoomOverlay();
     void repositionZoomOverlay();
     void updateFullScreenLabel();

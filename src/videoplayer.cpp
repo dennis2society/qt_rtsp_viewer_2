@@ -340,6 +340,7 @@ void VideoPlayer::toggleFullScreen()
     m_fullScreenLabel = new QLabel;
     m_fullScreenLabel->setAlignment(Qt::AlignCenter);
     m_fullScreenLabel->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    m_fullScreenLabel->setMouseTracking(true);
     lay->addWidget(m_fullScreenLabel);
 
     // Capture key/double-click on both the window and the label
@@ -436,14 +437,17 @@ void VideoPlayer::displayFrame(const QImage &image)
     }
 
     m_lastImage = image;
-    if (m_fullScreenLabel)
-        updateFullScreenLabel();
     updateDisplay();
 }
 
 // -----------------------------------------------------------------------------
 // Zoom / pan helpers
 // -----------------------------------------------------------------------------
+QLabel *VideoPlayer::activeLabel() const
+{
+    return m_fullScreenLabel ? m_fullScreenLabel : m_displayLabel;
+}
+
 void VideoPlayer::updateDisplay()
 {
     if (m_lastImage.isNull())
@@ -463,7 +467,8 @@ void VideoPlayer::updateDisplay()
     // Use fast scaling during live playback to reduce CPU load;
     // switch to smooth when paused / stopped so static frames look sharp.
     const Qt::TransformationMode tm = m_streamPlaying ? Qt::FastTransformation : Qt::SmoothTransformation;
-    m_displayLabel->setPixmap(QPixmap::fromImage(imgToShow).scaled(m_displayLabel->size(), Qt::KeepAspectRatio, tm));
+    auto *lbl = activeLabel();
+    lbl->setPixmap(QPixmap::fromImage(imgToShow).scaled(lbl->size(), Qt::KeepAspectRatio, tm));
 }
 
 void VideoPlayer::clampPanOffset()
@@ -481,7 +486,7 @@ QPointF VideoPlayer::labelToImageCoords(const QPointF &labelPos) const
 {
     if (m_lastImage.isNull())
         return {};
-    const QSize labelSize = m_displayLabel->size();
+    const QSize labelSize = activeLabel()->size();
     const QSizeF cropSize = QSizeF(m_lastImage.size()) / m_zoomFactor;
     const QSizeF scaledSize = cropSize.scaled(labelSize, Qt::KeepAspectRatio);
     const QPointF pixmapTL((labelSize.width() - scaledSize.width()) / 2.0, (labelSize.height() - scaledSize.height()) / 2.0);
@@ -519,8 +524,8 @@ void VideoPlayer::repositionZoomOverlay()
 // -----------------------------------------------------------------------------
 bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
 {
-    // Handle events from the full-screen window/label so it can be dismissed
-    if (obj == m_fullScreenWindow || obj == m_fullScreenLabel) {
+    // Full-screen window itself: only dismiss events (no zoom/pan on the container)
+    if (obj == m_fullScreenWindow) {
         if (event->type() == QEvent::MouseButtonDblClick) {
             auto *me = static_cast<QMouseEvent *>(event);
             if (me->button() == Qt::LeftButton) {
@@ -537,7 +542,8 @@ bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
         return QObject::eventFilter(obj, event);
     }
 
-    if (obj != m_displayLabel)
+    // Zoom/pan/dismiss on the normal label and on the full-screen label
+    if (obj != m_displayLabel && obj != m_fullScreenLabel)
         return QObject::eventFilter(obj, event);
 
     switch (event->type()) {
@@ -559,10 +565,10 @@ bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
         if (m_zoomFactor <= 1.0) {
             m_zoomFactor = 1.0;
             m_panOffset = QPointF(m_lastImage.width() / 2.0, m_lastImage.height() / 2.0);
-            m_displayLabel->setCursor(Qt::ArrowCursor);
+            activeLabel()->setCursor(Qt::ArrowCursor);
         } else {
             // Recompute pan so the image point under the cursor stays fixed
-            const QSize labelSize = m_displayLabel->size();
+            const QSize labelSize = activeLabel()->size();
             const QSizeF cropSize = QSizeF(m_lastImage.size()) / m_zoomFactor;
             const QSizeF scaledSize = cropSize.scaled(labelSize, Qt::KeepAspectRatio);
             const QPointF pixmapTL((labelSize.width() - scaledSize.width()) / 2.0, (labelSize.height() - scaledSize.height()) / 2.0);
@@ -572,7 +578,7 @@ bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
             m_panOffset =
                 imagePoint - QPointF(frac.x() * cropSize.width(), frac.y() * cropSize.height()) + QPointF(cropSize.width() / 2.0, cropSize.height() / 2.0);
             clampPanOffset();
-            m_displayLabel->setCursor(Qt::OpenHandCursor);
+            activeLabel()->setCursor(Qt::OpenHandCursor);
         }
 
         updateDisplay();
@@ -585,7 +591,7 @@ bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
         if (me->button() == Qt::LeftButton && m_zoomFactor > 1.0) {
             m_isDragging = true;
             m_lastMousePos = me->pos();
-            m_displayLabel->setCursor(Qt::ClosedHandCursor);
+            activeLabel()->setCursor(Qt::ClosedHandCursor);
             return true;
         }
         break;
@@ -597,7 +603,7 @@ bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
         if (m_isDragging && !m_lastImage.isNull()) {
             const QPoint delta = me->pos() - m_lastMousePos;
             m_lastMousePos = me->pos();
-            const QSize labelSize = m_displayLabel->size();
+            const QSize labelSize = activeLabel()->size();
             const QSizeF cropSize = QSizeF(m_lastImage.size()) / m_zoomFactor;
             const QSizeF scaledSize = cropSize.scaled(labelSize, Qt::KeepAspectRatio);
             // Dragging right pulls the view left → pan offset increases
@@ -613,7 +619,7 @@ bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
         auto *me = static_cast<QMouseEvent *>(event);
         if (me->button() == Qt::LeftButton && m_isDragging) {
             m_isDragging = false;
-            m_displayLabel->setCursor(m_zoomFactor > 1.0 ? Qt::OpenHandCursor : Qt::ArrowCursor);
+            activeLabel()->setCursor(m_zoomFactor > 1.0 ? Qt::OpenHandCursor : Qt::ArrowCursor);
             return true;
         }
         break;
