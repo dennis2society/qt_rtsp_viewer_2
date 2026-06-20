@@ -519,6 +519,24 @@ void VideoPlayer::repositionZoomOverlay()
 // -----------------------------------------------------------------------------
 bool VideoPlayer::eventFilter(QObject *obj, QEvent *event)
 {
+    // Handle events from the full-screen window/label so it can be dismissed
+    if (obj == m_fullScreenWindow || obj == m_fullScreenLabel) {
+        if (event->type() == QEvent::MouseButtonDblClick) {
+            auto *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::LeftButton) {
+                toggleFullScreen();
+                return true;
+            }
+        } else if (event->type() == QEvent::KeyPress) {
+            auto *ke = static_cast<QKeyEvent *>(event);
+            if (ke->key() == Qt::Key_Escape) {
+                m_fullScreenWindow->close();
+                return true;
+            }
+        }
+        return QObject::eventFilter(obj, event);
+    }
+
     if (obj != m_displayLabel)
         return QObject::eventFilter(obj, event);
 
