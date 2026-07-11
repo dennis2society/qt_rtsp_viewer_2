@@ -9,7 +9,13 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/core/ocl.hpp>
+#include <opencv2/core/version.hpp>
+
+#if CV_VERSION_MAJOR >= 5
 #include <opencv2/xobjdetect.hpp>
+#else
+#include <opencv2/objdetect.hpp>
+#endif
 
 #include "motionlogger.h"
 
