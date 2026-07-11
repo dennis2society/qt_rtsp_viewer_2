@@ -9,7 +9,7 @@
 
 #include <opencv2/core.hpp>
 #include <opencv2/core/ocl.hpp>
-#include <opencv2/objdetect.hpp>
+#include <opencv2/xobjdetect.hpp>
 
 #include "motionlogger.h"
 
