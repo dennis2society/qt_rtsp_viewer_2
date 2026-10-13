@@ -210,6 +210,18 @@ MainWindow::MainWindow(QWidget *parent)
 
 MainWindow::~MainWindow()
 {
+    // Child tabs emit state/playback signals while being destroyed after this
+    // body runs; sever links so they never reach a half-destroyed MainWindow.
+    disconnect(&StreamStateManager::instance(), nullptr, this, nullptr);
+    for (int i = 0; i < m_tabs->count(); ++i) {
+        if (auto *tab = qobject_cast<StreamTab *>(m_tabs->widget(i))) {
+            disconnect(tab, nullptr, this, nullptr);
+            disconnect(tab->videoPlayer(), nullptr, this, nullptr);
+        } else if (auto *ftab = qobject_cast<FilePlayerTab *>(m_tabs->widget(i))) {
+            disconnect(ftab, nullptr, this, nullptr);
+        }
+    }
+
     // Save open tabs before shutting down
     QList<StreamStateManager::TabEntry> tabs;
     for (int i = 0; i < m_tabs->count(); ++i) {
