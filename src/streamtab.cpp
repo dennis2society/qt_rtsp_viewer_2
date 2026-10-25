@@ -12,6 +12,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
+#include <QPainter>
+#include <QPainterPath>
 #include <QPushButton>
 #include <QRegularExpression>
 #include <QResizeEvent>
@@ -22,6 +24,34 @@
 
 static constexpr int kOverlayHeight = 52;
 static constexpr int kAutoHideMs = 3000;
+
+// Self-drawn so the icon looks the same regardless of Qt style / icon theme.
+static QIcon makePlayStopIcon(bool stop)
+{
+    QIcon icon;
+    for (int size : {26, 52}) {
+        QPixmap pm(size, size);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing);
+        p.setPen(Qt::NoPen);
+        const qreal m = size * 0.18;
+        if (stop) {
+            p.setBrush(QColor(0xff, 0x5a, 0x5a));
+            p.drawRoundedRect(QRectF(m, m, size - 2 * m, size - 2 * m), size * 0.08, size * 0.08);
+        } else {
+            QPainterPath tri;
+            tri.moveTo(m * 1.3, m * 0.8);
+            tri.lineTo(size - m * 0.8, size / 2.0);
+            tri.lineTo(m * 1.3, size - m * 0.8);
+            tri.closeSubpath();
+            p.setBrush(QColor(0x4c, 0xd9, 0x64));
+            p.drawPath(tri);
+        }
+        icon.addPixmap(pm);
+    }
+    return icon;
+}
 
 // -----------------------------------------------------------------------------
 StreamTab::StreamTab(int streamId, QWidget *parent)
@@ -74,11 +104,15 @@ StreamTab::StreamTab(int streamId, QWidget *parent)
     overlayLay->setSpacing(6);
 
     m_playStopBtn = new QPushButton;
-    m_playStopBtn->setIcon(style()->standardIcon(QStyle::SP_MediaPlay));
+    m_playStopBtn->setIcon(makePlayStopIcon(false));
     m_playStopBtn->setToolTip(QStringLiteral("Play / Stop"));
     m_playStopBtn->setFixedSize(44, 44);
     m_playStopBtn->setIconSize(QSize(26, 26));
-    m_playStopBtn->setStyleSheet(QStringLiteral("color:white;border:none;background:transparent;"));
+    m_playStopBtn->setStyleSheet(
+        QStringLiteral("QPushButton{border:1px solid rgba(255,255,255,90);border-radius:22px;"
+                       "background:rgba(255,255,255,40);}"
+                       "QPushButton:hover{background:rgba(255,255,255,80);}"
+                       "QPushButton:pressed{background:rgba(255,255,255,120);}"));
 
     m_recordBtn = new QPushButton(QStringLiteral("⏺"));
     m_recordBtn->setCheckable(true);
@@ -461,7 +495,7 @@ void StreamTab::onUrlChanged(const QString &url)
 // -----------------------------------------------------------------------------
 void StreamTab::updateOverlayButtons()
 {
-    m_playStopBtn->setIcon(style()->standardIcon(m_isPlaying ? QStyle::SP_MediaStop : QStyle::SP_MediaPlay));
+    m_playStopBtn->setIcon(makePlayStopIcon(m_isPlaying));
     m_recordBtn->setEnabled(m_isPlaying);
     m_snapshotBtn->setEnabled(m_isPlaying);
 }
