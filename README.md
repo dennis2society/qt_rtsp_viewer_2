@@ -37,7 +37,7 @@ This is a Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, *
   - Configurable stop timeout (1–120 seconds)
   - Automatic filename with timestamp + camera name prefix
 - **Codec selection** - per-stream choice of H.264 (libx264) or H.265/HEVC (libx265)
-- **Raw stream recording** - record a stream without re-encoding(and without overlays, requires ffmpeg binary in $PATH)
+- **Raw stream recording** - record a stream without re-encoding (and without overlays); uses libavformat, or the `ffmpeg` binary in $PATH if built without FFmpeg libraries
 - **Container format** - per-stream choice of MP4, MKV, or AVI
 - **Persistent output folder** - global recording directory, shared across all streams
 - **Optional per-tab output folder**

@@ -1,0 +1,148 @@
+name: Build & Package
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+env:
+  QT_VERSION: '6.10.2'
+  OPENCV_VERSION: '4.12.0'
+
+jobs:
+  linux-appimage:
+    name: Linux AppImage (Ubuntu 22.04)
+    # Oldest supported distro: the AppImage requires at least its glibc (2.35).
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential ninja-build file wget \
+            libopencv-dev \
+            libavcodec-dev libavformat-dev libavutil-dev libswscale-dev \
+            libgl1-mesa-dev libegl1-mesa-dev libxkbcommon-dev libxkbcommon-x11-0 \
+            libxcb-cursor0 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 \
+            libfontconfig1 libdbus-1-3
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: linux
+          target: desktop
+          arch: linux_gcc_64
+          modules: qtmultimedia
+          cache: true
+
+      - name: Configure
+        # Ubuntu 22.04 ships FFmpeg 4.4; don't fail on its deprecation warnings.
+        run: >
+          cmake -B build -G Ninja
+          -DCMAKE_BUILD_TYPE=Release
+          -DCMAKE_CXX_FLAGS="-Wno-error=deprecated-declarations"
+
+      - name: Build
+        run: cmake --build build
+
+      - name: Package AppImage
+        run: QMAKE="$QT_ROOT_DIR/bin/qmake" bash zz_packaging/build_appimage.sh
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: QtRtspViewer-*.AppImage
+          if-no-files-found: error
+
+  windows:
+    name: Windows MSVC 2022 (zip + installer)
+    runs-on: windows-2022
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up MSVC environment
+        uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtmultimedia
+          cache: true
+
+      - name: Cache OpenCV
+        id: cache-opencv
+        uses: actions/cache@v4
+        with:
+          path: C:\opencv
+          key: opencv-${{ env.OPENCV_VERSION }}-win64
+
+      - name: Download OpenCV
+        if: steps.cache-opencv.outputs.cache-hit != 'true'
+        run: |
+          $url = "https://github.com/opencv/opencv/releases/download/$env:OPENCV_VERSION/opencv-$env:OPENCV_VERSION-windows.exe"
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile opencv.exe
+          7z x opencv.exe -oC:\opencv -y | Out-Null
+          Remove-Item opencv.exe
+
+      - name: Cache FFmpeg
+        uses: actions/cache@v4
+        with:
+          path: zz_packaging/tools/ffmpeg
+          key: ffmpeg-win64-${{ hashFiles('zz_packaging/build_windows_portable.ps1') }}
+
+      - name: Build and create portable zip
+        run: >
+          ./zz_packaging/build_windows_portable.ps1
+          -QtDir $env:QT_ROOT_DIR
+          -OpenCvDir C:\opencv\opencv\build
+          -DownloadFfmpeg
+
+      - name: Install Inno Setup
+        run: |
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) {
+            choco install innosetup -y --no-progress
+          }
+
+      - name: Create installer
+        run: ./zz_packaging/build_windows_installer.ps1 -ReuseStage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            zz_packaging/dist/*-portable.zip
+            zz_packaging/dist/*-setup.exe
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [linux-appimage, windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/*
+          generate_release_notes: true

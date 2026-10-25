@@ -2,21 +2,31 @@
 #include "onvifsettingsdialog.h"
 #include "streamstatemanager.h"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QDate>
 #include <QFileDialog>
 #include <QFrame>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
+#include <QSettings>
 #include <QSlider>
 #include <QSpinBox>
 #include <QToolButton>
 #include <QVBoxLayout>
 
 #include <opencv2/core/ocl.hpp>
+
+#ifdef HAVE_FFMPEG
+extern "C" {
+#include <libavutil/avutil.h>
+}
+#endif
 
 // -----------------------------------------------------------------------------
 EffectsSidebar::EffectsSidebar(QWidget *parent)
@@ -337,6 +347,11 @@ void EffectsSidebar::setupUI()
 
     mainLay->addStretch(1);
 
+    mainLay->addWidget(hLine());
+
+    m_aboutBtn = new QPushButton(QStringLiteral("About..."));
+    mainLay->addWidget(m_aboutBtn);
+
     setLayout(mainLay);
     setMinimumWidth(200);
     setMaximumWidth(270);
@@ -526,6 +541,45 @@ void EffectsSidebar::connectSlots()
         auto *dlg = new OnvifSettingsDialog(m_boundStream, this);
         dlg->setAttribute(Qt::WA_DeleteOnClose);
         dlg->show();
+    });
+
+    // -- About -------------------------------------------------------
+    connect(m_aboutBtn, &QPushButton::clicked, this, [this]() {
+#ifdef HAVE_FFMPEG
+        const QString ffmpegInfo = QStringLiteral("FFmpeg (libavutil) %1 - recording enabled").arg(QString::fromUtf8(av_version_info()));
+#else
+        const QString ffmpegInfo = QStringLiteral("FFmpeg: not compiled in - recording disabled");
+#endif
+        const QString openclInfo = cv::ocl::haveOpenCL() ? QStringLiteral("available") : QStringLiteral("not available");
+        const QString configPath = QSettings().fileName();
+
+        const QString text = QStringLiteral(
+                                 "<h3>Qt RTSP Viewer %1</h3>"
+                                 "<p>2025-%8 - Dennis Luebke</p>"
+                                 "<p>Multi-stream RTSP viewer with real-time image processing, "
+                                 "motion detection and (automated) recording.<br>"
+                                 "Partially AI generated.</p>"
+                                 "<p><b>Libraries</b><br>"
+                                 "Qt %2 (built against %3)<br>"
+                                 "OpenCV %4 (OpenCL: %5)<br>"
+                                 "%6</p>"
+                                 "<p><b>Settings</b><br>%7</p>"
+                                 "<p><b>License</b><br>GPLv2</p>")
+                                 .arg(QApplication::applicationVersion().toHtmlEscaped(),
+                                      QString::fromLatin1(qVersion()),
+                                      QStringLiteral(QT_VERSION_STR),
+                                      QStringLiteral(CV_VERSION),
+                                      openclInfo,
+                                      ffmpegInfo.toHtmlEscaped(),
+                                      configPath.toHtmlEscaped(),
+                                      QString::number(QDate::currentDate().year()));
+
+        QMessageBox box(this);
+        box.setWindowTitle(QStringLiteral("About Qt RTSP Viewer"));
+        box.setTextFormat(Qt::RichText);
+        box.setText(text);
+        box.setIconPixmap(QApplication::windowIcon().pixmap(64, 64));
+        box.exec();
     });
 }
 

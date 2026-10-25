@@ -102,4 +102,7 @@ private:
 
     // ONVIF
     QPushButton *m_onvifSettingsBtn = nullptr;
+
+    // About
+    QPushButton *m_aboutBtn = nullptr;
 };
