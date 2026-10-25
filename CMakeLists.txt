@@ -20,6 +20,20 @@ find_package(Qt6 REQUIRED COMPONENTS
 # ── OpenCV ───────────────────────────────────────────────────────────────────
 find_package(OpenCV REQUIRED)
 
+# Link only the modules we use. ${OpenCV_LIBS} would pull in every module of the
+# installation (viz -> VTK, hdf, gapi, dnn, ...) and bloat deployments.
+# With an opencv_world build, OpenCV_LIBS is already a single library.
+if("opencv_world" IN_LIST OpenCV_LIBS)
+    set(APP_OPENCV_LIBS ${OpenCV_LIBS})
+else()
+    set(APP_OPENCV_LIBS opencv_core opencv_imgproc opencv_video)
+    if(OpenCV_VERSION_MAJOR GREATER_EQUAL 5)
+        list(APPEND APP_OPENCV_LIBS opencv_xobjdetect)
+    else()
+        list(APPEND APP_OPENCV_LIBS opencv_objdetect)
+    endif()
+endif()
+
 # ── FFmpeg (optional) ────────────────────────────────────────────────────────
 # On Linux, pkg-config finds FFmpeg automatically.
 # On Windows, pass -DFFMPEG_DIR=<path-to-ffmpeg> where the path contains
@@ -81,6 +95,7 @@ set(SOURCES
     src/recorddialog.cpp
     src/onvifclient.cpp
     src/onvifsettingsdialog.cpp
+    src/rtspdiscoverydialog.cpp
     res/resources.qrc
 )
 
@@ -101,10 +116,12 @@ set(HEADERS
     src/recorddialog.h
     src/onvifclient.h
     src/onvifsettingsdialog.h
+    src/rtspdiscoverydialog.h
 )
 
 
-add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS}
+    src/rtspdiscoverydialog.h)
 
 target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:
@@ -122,20 +139,22 @@ target_compile_options(${PROJECT_NAME} PRIVATE
     >
 )
 
+target_compile_definitions(${PROJECT_NAME} PRIVATE APP_VERSION="${PROJECT_VERSION}")
+
 target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Core
     Qt6::Gui
     Qt6::Widgets
     Qt6::Multimedia
     Qt6::Network
-    ${OpenCV_LIBS}
+    ${APP_OPENCV_LIBS}
 )
 
 if(FFMPEG_FOUND)
     message(STATUS "FFmpeg found - recording support enabled")
     target_compile_definitions(${PROJECT_NAME} PRIVATE HAVE_FFMPEG)
     target_link_libraries(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARIES})
-    target_include_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_INCLUDE_DIRS})
+    target_include_directories(${PROJECT_NAME} SYSTEM PRIVATE ${FFMPEG_INCLUDE_DIRS})
     target_link_directories(${PROJECT_NAME} PRIVATE ${FFMPEG_LIBRARY_DIRS})
 else()
     message(WARNING "FFmpeg NOT found - recording support disabled")

@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "effectssidebar.h"
 #include "fileplayertab.h"
+#include "rtspdiscoverydialog.h"
 #include "streamstatemanager.h"
 #include "streamtab.h"
 #include "videoplayer.h"
@@ -50,6 +51,11 @@ MainWindow::MainWindow(QWidget *parent)
     cornerLay->setContentsMargins(0, 0, 2, 0);
     cornerLay->setSpacing(2);
 
+    m_discoverBtn = new QPushButton(QStringLiteral("🔍"));
+    m_discoverBtn->setToolTip(QStringLiteral("Discover RTSP cameras on the network"));
+    m_discoverBtn->setFixedSize(28, 28);
+    cornerLay->addWidget(m_discoverBtn);
+
     m_openFileBtn = new QPushButton(QStringLiteral("📁"));
     m_openFileBtn->setToolTip(QStringLiteral("Open video file in new tab"));
     m_openFileBtn->setFixedSize(28, 28);
@@ -83,6 +89,7 @@ MainWindow::MainWindow(QWidget *parent)
     // -- Connections -------------------------------------------------
     connect(m_addTabBtn, &QPushButton::clicked, this, &MainWindow::addNewTab);
     connect(m_openFileBtn, &QPushButton::clicked, this, &MainWindow::openFilePlayerTab);
+    connect(m_discoverBtn, &QPushButton::clicked, this, &MainWindow::showDiscoveryDialog);
     connect(m_tabs, &QTabWidget::tabCloseRequested, this, &MainWindow::closeTab);
     connect(m_tabs, &QTabWidget::currentChanged, this, &MainWindow::onCurrentTabChanged);
 
@@ -413,6 +420,31 @@ void MainWindow::openFilePlayerTab()
     });
 
     m_tabs->tabBar()->setTabsClosable(m_tabs->count() > 1);
+}
+
+void MainWindow::showDiscoveryDialog()
+{
+    if (!m_discoveryDialog) {
+        m_discoveryDialog = new RtspDiscoveryDialog(this);
+        connect(m_discoveryDialog, &RtspDiscoveryDialog::openUrlRequested, this, &MainWindow::openDiscoveredUrl);
+    }
+    m_discoveryDialog->show();
+    m_discoveryDialog->raise();
+    m_discoveryDialog->activateWindow();
+}
+
+void MainWindow::openDiscoveredUrl(const QString &url)
+{
+    if (m_tabs->count() >= StreamStateManager::MaxTabs) {
+        statusBar()->showMessage(QStringLiteral("Maximum of %1 tabs reached - close a tab first.").arg(StreamStateManager::MaxTabs), 5000);
+        return;
+    }
+    addNewTab();
+    if (auto *tab = qobject_cast<StreamTab *>(m_tabs->currentWidget())) {
+        auto *combo = tab->findChild<QComboBox *>();
+        if (combo && combo->lineEdit())
+            combo->lineEdit()->setText(url);
+    }
 }
 
 // -----------------------------------------------------------------------------

@@ -54,7 +54,7 @@ compile_commands.json
 *_qmlcache.qrc
 
 # misc
-build*
+build*/
 .vscode
 .qt
 CMakeFiles
@@ -65,3 +65,7 @@ Makefile
 rec/
 prompt.txt
 __pycache__/
+# packaging
+zz_packaging/tools/
+zz_packaging/dist/
+*.AppImage

@@ -93,7 +93,7 @@ public:
     int lastActiveTabIndex() const;
     void setLastActiveTabIndex(int index);
 
-    static constexpr int MaxTabs = 4;
+    static constexpr int MaxTabs = 8;
     static constexpr int MaxUrlHistory = 20;
 
     // -- persistence -------------------------------------------------
