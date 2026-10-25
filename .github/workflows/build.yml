@@ -54,9 +54,15 @@ jobs:
       - name: Package AppImage
         run: QMAKE="$QT_ROOT_DIR/bin/qmake" bash zz_packaging/build_appimage.sh
 
+      - name: Artifact name
+        id: meta
+        run: |
+          ver=$(sed -n 's/^project([A-Za-z0-9_]* VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          echo "base=QtRtspViewer-${ver}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: linux-appimage
+          name: ${{ steps.meta.outputs.base }}-linux-x86_64-AppImage
           path: QtRtspViewer-*.AppImage
           if-no-files-found: error
 
@@ -121,12 +127,23 @@ jobs:
       - name: Create installer
         run: ./zz_packaging/build_windows_installer.ps1 -ReuseStage
 
+      - name: Artifact name
+        id: meta
+        shell: bash
+        run: |
+          ver=$(sed -n 's/^project([A-Za-z0-9_]* VERSION \([0-9.]*\).*/\1/p' CMakeLists.txt)
+          echo "base=QtRtspViewer-${ver}-${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: windows
-          path: |
-            zz_packaging/dist/*-portable.zip
-            zz_packaging/dist/*-setup.exe
+          name: ${{ steps.meta.outputs.base }}-win64-portable
+          path: zz_packaging/dist/*-portable.zip
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.meta.outputs.base }}-win64-setup
+          path: zz_packaging/dist/*-setup.exe
           if-no-files-found: error
 
   release:
