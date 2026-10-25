@@ -11,7 +11,9 @@ This is a Qt6-based RTSP stream viewer with **multi-stream tabbed interface**, *
 ## Features
 
 ### Playback & Multi-Stream
-- **Tabbed stream interface** - display up to 4 RTSP streams simultaneously
+- **Tabbed stream interface** - display up to 8 RTSP streams simultaneously
+- **RTSP camera discovery** - scan an IPv4 range for open RTSP ports (default 554/8554), confirmed via an RTSP `OPTIONS` request; open results directly in a new tab
+- **Stream URL test** - for a discovered host, probes the configured path, previously used URLs and common vendor paths (Hikvision, Dahua, Reolink, Foscam, Axis, Uniview, …) with RTSP `DESCRIBE` (Basic/Digest auth supported) and lists which ones work
 - **Per-stream URL history** - persistent, searchable RTSP URL list
 - **Per-camera naming** - customize display names for each stream
 - **Independent playback control** - play/pause/stop each stream independently
@@ -135,7 +137,7 @@ Settings are stored in `~/.config/QtRtspViewer/QtRtspViewer.conf` (Linux) or the
 
 ## Known Limitations
 
-- **Maximum 4 tabs** - resource constraint for multi-stream processing
+- **Maximum 8 tabs** - resource constraint for multi-stream processing
 - **No snapshot/export** - current frame cannot be saved as image (can be added)
 
 ## Troubleshooting

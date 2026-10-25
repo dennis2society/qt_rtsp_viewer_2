@@ -81,6 +81,7 @@ set(SOURCES
     src/recorddialog.cpp
     src/onvifclient.cpp
     src/onvifsettingsdialog.cpp
+    src/rtspdiscoverydialog.cpp
     res/resources.qrc
 )
 
@@ -101,10 +102,12 @@ set(HEADERS
     src/recorddialog.h
     src/onvifclient.h
     src/onvifsettingsdialog.h
+    src/rtspdiscoverydialog.h
 )
 
 
-add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS})
+add_executable(${PROJECT_NAME} WIN32 ${SOURCES} ${HEADERS}
+    src/rtspdiscoverydialog.h)
 
 target_compile_options(${PROJECT_NAME} PRIVATE
     $<$<CXX_COMPILER_ID:GNU,Clang>:

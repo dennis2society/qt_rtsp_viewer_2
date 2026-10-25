@@ -9,6 +9,7 @@ class QPushButton;
 class EffectsSidebar;
 class StreamTab;
 class FilePlayerTab;
+class RtspDiscoveryDialog;
 
 class MainWindow : public QMainWindow
 {
@@ -25,6 +26,8 @@ private slots:
     void onTabTitleChanged(int streamId, const QString &title);
     void openFilePlayerTab();
     void updateTabIcon(int streamId);
+    void showDiscoveryDialog();
+    void openDiscoveredUrl(const QString &url);
 
 private:
     int streamIdForTab(int index) const;
@@ -40,6 +43,8 @@ private:
     QScrollArea *m_sidebarScroll = nullptr;
     QPushButton *m_addTabBtn = nullptr;
     QPushButton *m_openFileBtn = nullptr;
+    QPushButton *m_discoverBtn = nullptr;
+    RtspDiscoveryDialog *m_discoveryDialog = nullptr;
 
     // Saved scroll positions per stream id (so they survive tab switches)
     QMap<int, int> m_sidebarScrollPos;
