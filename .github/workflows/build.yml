@@ -1,10 +1,7 @@
 name: Build & Package
 
+# Manual only: Actions tab -> "Build & Package" -> "Run workflow".
 on:
-  push:
-    branches: [main, master]
-    tags: ['v*']
-  pull_request:
   workflow_dispatch:
 
 env:
